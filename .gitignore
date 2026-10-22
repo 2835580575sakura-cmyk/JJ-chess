@@ -1,0 +1,13 @@
+.gradle/
+**/build/
+.build/
+.superpowers/
+.local-signing/
+local.properties
+*.jks
+*.keystore
+*.nnue
+*.7z
+*.zip
+*.apk
+**/__pycache__/
