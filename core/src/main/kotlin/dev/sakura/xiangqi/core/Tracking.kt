@@ -32,6 +32,7 @@ class GameTracker {
         if(matches.isNotEmpty())return TrackingUpdate.NeedsConfirmation(board,matches,"检测到悔棋或重开，请确认行棋方")
         return TrackingUpdate.Unsynced(board,"局面出现跳变，请重新确认棋盘及行棋方")
     }
+    fun historyAt(index:Int):ConfirmedPosition?=nodes.getOrNull(index)
     fun confirmRecovery(snapshot: PositionSnapshot,historyIndex: Int?):ConfirmedPosition {
         if(historyIndex==null) return start(snapshot,snapshot.board==FenCodec.decode(START_FEN).getOrThrow().board && snapshot.sideToMove==Side.RED)
         val selected=nodes.getOrNull(historyIndex) ?: error("历史节点不存在")
