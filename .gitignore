@@ -13,3 +13,5 @@ local.properties
 *.zip
 *.apk
 **/__pycache__/
+
+dist/

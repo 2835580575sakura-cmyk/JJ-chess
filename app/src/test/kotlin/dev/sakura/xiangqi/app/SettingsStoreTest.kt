@@ -13,6 +13,14 @@ class SettingsStoreTest {
         val config=SessionConfig(playerSide=Side.BLACK,movetimeMs=30000,orientation=Orientation.BLACK_BOTTOM)
         SettingsStore(context).save(config); assertEquals(config,SettingsStore(context).load())
     }
+    @Test fun calibrationOnlyRestoredForMatchingFrameAndDisplay() {
+        val store=SettingsStore(RuntimeEnvironment.getApplication())
+        val cal=GridCalibration(FloatRect(40f,366f,545f,909f),FloatRect(100f,915f,1362f,2272f))
+        store.saveCalibration(cal,576,1280,1440,3200)
+        assertEquals(cal,store.loadCalibration(576,1280,1440,3200,Orientation.RED_BOTTOM))
+        assertNull(store.loadCalibration(576,1280,1080,2400,Orientation.RED_BOTTOM))
+        assertNull(store.loadCalibration(576,1280,1440,3200,Orientation.BLACK_BOTTOM))
+    }
     @Test fun corruptSettingsUseSafeDefaults() {
         val context=RuntimeEnvironment.getApplication()
         context.getSharedPreferences("assistant",0).edit().putString("config","broken").commit()

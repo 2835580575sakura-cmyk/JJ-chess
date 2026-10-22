@@ -13,6 +13,9 @@ import java.util.zip.*
 import kotlin.math.*
 @Serializable enum class DiagnosticCode { RECOGNITION_UNCERTAIN,NEEDS_CONFIRMATION,ENGINE_ERROR,CAPTURE_STOPPED,THERMAL_PAUSE,MEMORY_RETRY }
 @Serializable data class DiagnosticEvent(val elapsedMs:Long,val code:DiagnosticCode)
+data class DiagnosticSample(val frame:PixelFrame,val calibration:dev.sakura.xiangqi.core.GridCalibration) {
+    fun crop():PixelFrame=DiagnosticExporter.crop(frame,calibration.captureRect)
+}
 class DiagnosticExporter(private val context:Context) {
     var lastFile:File?=null; private set
     fun export(boardCrop:PixelFrame,log:List<DiagnosticEvent>):Uri {

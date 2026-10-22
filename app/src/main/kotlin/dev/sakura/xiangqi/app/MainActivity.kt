@@ -47,7 +47,7 @@ class MainActivity:Activity() {
         if(!Settings.canDrawOverlays(this)) { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,Uri.parse("package:$packageName"))); toast("请允许显示悬浮窗，然后再点开始分析"); return }
         store.save(readConfig())
         if(Build.VERSION.SDK_INT>=33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS),8)
-        @Suppress("DEPRECATION") startActivityForResult(getSystemService(MediaProjectionManager::class.java).createScreenCaptureIntent(),7)
+        @Suppress("DEPRECATION") startActivityForResult(if(Build.VERSION.SDK_INT>=34)getSystemService(MediaProjectionManager::class.java).createScreenCaptureIntent(android.media.projection.MediaProjectionConfig.createConfigForDefaultDisplay()) else getSystemService(MediaProjectionManager::class.java).createScreenCaptureIntent(),7)
     }
     @Deprecated("Platform consent result") override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?) {
         super.onActivityResult(requestCode,resultCode,data)
@@ -90,7 +90,9 @@ class MainActivity:Activity() {
         val root=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; addView(TextView(this@MainActivity).apply { text="拖动蓝色两角，对齐左上和右下的棋盘交点（不含棋盘外框）。" }); addView(view,LinearLayout.LayoutParams(-1,(resources.displayMetrics.heightPixels*.65f).toInt())) }
         AlertDialog.Builder(this).setTitle("校准棋盘").setView(root).setNegativeButton("取消",null).setPositiveButton("保存") { _,_ ->
             val (w,h)=runtime.overlay.screenSize(); val r=view.rect
-            runtime.coordinator.recalibrate(current.copy(captureRect=r,displayRect=FloatRect(r.left*w/frame.width,r.top*h/frame.height,r.right*w/frame.width,r.bottom*h/frame.height)))
+            val calibrated=current.copy(captureRect=r,displayRect=FloatRect(r.left*w/frame.width,r.top*h/frame.height,r.right*w/frame.width,r.bottom*h/frame.height))
+            store.saveCalibration(calibrated,frame.width,frame.height,w,h)
+            runtime.coordinator.recalibrate(calibrated)
             toast("已保存；返回 JJ 稳定识别后再校验棋子")
         }.show()
     }
@@ -105,10 +107,10 @@ class MainActivity:Activity() {
     }
     private fun exportDiagnostic() {
         val runtime=AssistantRuntime.current?:return toast("请先开始分析")
-        val frame=runtime.preview?:return toast("还没有 JJ 棋盘画面"); val rect=runtime.coordinator.state.value.calibration?.captureRect?:return toast("请先校准棋盘")
+        val sample=runtime.coordinator.diagnosticSample?:return toast("还没有经过稳定识别的棋盘，请先校准和识别")
         scope.launch {
             runCatching {
-                val uri=withContext(Dispatchers.IO) { DiagnosticExporter(this@MainActivity).export(DiagnosticExporter.crop(frame,rect),listOf(DiagnosticEvent(SystemClock.elapsedRealtime(),DiagnosticCode.NEEDS_CONFIRMATION))) }
+                val uri=withContext(Dispatchers.IO) { DiagnosticExporter(this@MainActivity).export(sample.crop(),listOf(DiagnosticEvent(SystemClock.elapsedRealtime(),DiagnosticCode.NEEDS_CONFIRMATION))) }
                 startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("application/zip").putExtra(Intent.EXTRA_STREAM,uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),"分享棋盘诊断"))
             }.onFailure { toast("导出失败，请检查剩余存储空间") }
         }

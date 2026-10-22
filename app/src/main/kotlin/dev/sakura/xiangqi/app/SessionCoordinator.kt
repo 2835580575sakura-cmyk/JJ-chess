@@ -23,7 +23,8 @@ object ScorePresentation {
             ?:playerCp(score,turn,player)?.let { "我方评分 %+.2f".format(java.util.Locale.ROOT,it/100.0) }?:"评分计算中"
     }
 }
-class SessionCoordinator(private val scope:CoroutineScope,private val gateway:EngineGateway,private val overlay:HintOverlay,private val screenSize:()->Pair<Int,Int> = {576 to 1280},private val onConfirmed:(ConfirmedPosition)->Unit={}) {
+class SessionCoordinator(private val scope:CoroutineScope,private val gateway:EngineGateway,private val overlay:HintOverlay,private val screenSize:()->Pair<Int,Int> = {576 to 1280},private val restoreCalibration:(PixelFrame)->GridCalibration?={null},private val onConfirmed:(ConfirmedPosition)->Unit={}) {
+    var diagnosticSample:DiagnosticSample?=null; private set
     private val mutable=MutableStateFlow(SessionState()); val state:StateFlow<SessionState> = mutable.asStateFlow()
     private val mutex=Mutex(); private val tracker=GameTracker(); private val stable=StabilityGate()
     private val recognizer by lazy { BoardRecognizer(TemplateClassifier.fromResource()) }
@@ -46,15 +47,19 @@ class SessionCoordinator(private val scope:CoroutineScope,private val gateway:En
         if(stopped||paused)return
         var calibration=mutable.value.calibration
         if(calibration==null) {
-            val located=withContext(Dispatchers.Default) { GridLocator.locate(frame) }?:return
+            val restored=restoreCalibration(frame)
+            val located=restored?:withContext(Dispatchers.Default) { GridLocator.locate(frame) }?:return
             val (w,h)=screenSize(); val r=located.captureRect
-            calibration=located.copy(displayRect=FloatRect(r.left*w/frame.width,r.top*h/frame.height,r.right*w/frame.width,r.bottom*h/frame.height),orientation=config.orientation,transformRevision=++transform)
+            calibration=located.copy(displayRect=restored?.displayRect?:FloatRect(r.left*w/frame.width,r.top*h/frame.height,r.right*w/frame.width,r.bottom*h/frame.height),orientation=config.orientation,transformRevision=++transform)
             mutable.value=mutable.value.copy(calibration=calibration); overlay.setCalibration(calibration)
         }
         val observation=withContext(Dispatchers.Default) { recognizer.recognize(frame,calibration) }
         if(observation.board!=tracker.current?.snapshot?.board || observation.occluded || observation.motion>.10f)invalidate()
         else mutable.value.key?.let { overlay.restore(it) }
-        stable.accept(observation)?.let { handleObservation(it,calibration) }
+        stable.accept(observation)?.let {
+            if(it.board!=null && FenCodec.decode(FenCodec.encode(PositionSnapshot(it.board!!,config.initialTurn))).isSuccess)diagnosticSample=DiagnosticSample(frame,calibration)
+            handleObservation(it,calibration)
+        }
     }
     fun onObservation(observation:BoardObservation,calibration:GridCalibration)=launch { if(!stopped && !paused)handleObservation(observation,calibration) }
     private suspend fun handleObservation(observation:BoardObservation,calibration:GridCalibration) {
@@ -129,7 +134,7 @@ class SessionCoordinator(private val scope:CoroutineScope,private val gateway:En
     fun resume()=launch { if(!stopped) { paused=false; stable.reset(); update(SessionPhase.WAITING_BOARD,"等待新鲜稳定棋盘") } }
     fun recalibrate(calibration:GridCalibration)=launch { invalidate(); recognizer.reset(); stable.reset(); mutable.value=mutable.value.copy(calibration=calibration.copy(transformRevision=++transform)); overlay.setCalibration(mutable.value.calibration!!); update(SessionPhase.NEEDS_SYNC,"标定已更新，请重新校验棋盘") }
     fun stop()=launch { if(!closed) {
-        stopped=true; paused=true; closed=true
+        stopped=true; paused=true; closed=true; diagnosticSample=null
         try { invalidate() } finally { gateway.close(); frames.close(); mutable.value=SessionState(); overlay.clear(); overlay.status("已停止") }
     } }
 }

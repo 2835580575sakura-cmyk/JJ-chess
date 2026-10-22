@@ -10,6 +10,14 @@ import org.robolectric.annotation.Config
 import java.util.zip.ZipFile
 @RunWith(RobolectricTestRunner::class) @Config(sdk=[34],manifest=Config.NONE)
 class DiagnosticExporterTest {
+    @Test fun diagnosticCropKeepsTheTransformFromItsRecognizedFrame() {
+        val frame=PixelFrame(100,200,IntArray(20000) { i -> if(i/100 in 40..159)0xff112233.toInt() else 0xffff0000.toInt() },1)
+        val rect=FloatRect(10f,40f,90f,160f)
+        val sample=DiagnosticSample(frame,dev.sakura.xiangqi.core.GridCalibration(rect,rect))
+        val crop=sample.crop()
+        assertEquals(80,crop.width); assertEquals(120,crop.height)
+        assertTrue(crop.argb.all { it==0xff112233.toInt() })
+    }
     @Test fun exportContainsOnlyBoardCrop() {
         val frame=PixelFrame(100,200,IntArray(20000){0xffaabbcc.toInt()},1)
         val crop=DiagnosticExporter.crop(frame,FloatRect(10f,40f,90f,160f))

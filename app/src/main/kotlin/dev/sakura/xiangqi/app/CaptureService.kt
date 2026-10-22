@@ -72,6 +72,7 @@ class CaptureService:Service() {
         }
         override fun createDisplay() {
             val metrics=DisplayMetrics(); (getSystemService(WINDOW_SERVICE) as WindowManager).defaultDisplay.getRealMetrics(metrics)
+            controller.setSurfaceSize(metrics.widthPixels,metrics.heightPixels)
             reader=ImageReader.newInstance(metrics.widthPixels,metrics.heightPixels,PixelFormat.RGBA_8888,2).apply {
                 setOnImageAvailableListener({ source ->
                     if(stopping)return@setOnImageAvailableListener

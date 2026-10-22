@@ -47,6 +47,12 @@ class ProjectionLifecycleTest {
         assertArrayEquals(intArrayOf(0xffff0000.toInt(),0xff00ff00.toInt(),0xff0000ff.toInt(),0xffffffff.toInt()),frame.argb)
         assertEquals(123L,frame.timestampNs)
     }
+    @Test fun initialSizeCallbackDoesNotPauseCapture() {
+        val events=mutableListOf<CaptureEvent>(); val c=ProjectionController(Platform()){events.add(it)}
+        c.setSurfaceSize(1440,3200); c.begin(Activity.RESULT_OK,Intent()); c.onResized(1440,3200)
+        assertEquals(listOf(CaptureEvent.Started),events)
+        c.onResized(1440,2880); assertEquals(CaptureEvent.Resized(1440,2880),events.last()); c.stop()
+    }
     @Test fun resizeInvalidatesCalibration() {
         val events=mutableListOf<CaptureEvent>(); val c=ProjectionController(Platform()){events.add(it)}
         c.begin(Activity.RESULT_OK,Intent()); c.onResized(500,900)

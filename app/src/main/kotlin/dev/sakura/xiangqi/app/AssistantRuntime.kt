@@ -18,7 +18,9 @@ class AssistantRuntime private constructor(private val context:Context,val confi
     } }
     private val sessionStore=SessionStore(context.filesDir)
     val recoveryCandidate get()=sessionStore.loadCandidate()
-    val coordinator=SessionCoordinator(scope,BinderEngineGateway(context,config.options),overlay,overlay::screenSize) { position -> runCatching { sessionStore.save(position) } }
+    val coordinator=SessionCoordinator(scope,BinderEngineGateway(context,config.options),overlay,overlay::screenSize,
+        restoreCalibration={ frame -> val (w,h)=overlay.screenSize(); SettingsStore(context).loadCalibration(frame.width,frame.height,w,h,config.orientation) },
+        onConfirmed={ position -> runCatching { sessionStore.save(position) } })
     private val policy=ResourcePolicy()
     private val power=context.getSystemService(PowerManager::class.java)
     private var thermalBlocked=false

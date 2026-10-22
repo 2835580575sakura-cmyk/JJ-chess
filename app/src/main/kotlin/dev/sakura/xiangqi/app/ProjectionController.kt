@@ -14,6 +14,8 @@ class ProjectionController(private val platform:ProjectionPlatform,private val e
     enum class State { IDLE, STARTING, CAPTURING, STOPPED }
     @Volatile var state=State.IDLE; private set
     private var session:ProjectionSession?=null
+    private var surfaceSize:Pair<Int,Int>?=null
+    @Synchronized fun setSurfaceSize(width:Int,height:Int) { require(width>0 && height>0); surfaceSize=width to height }
     @Synchronized fun begin(resultCode:Int,consentData:Intent) {
         if(state==State.STARTING || state==State.CAPTURING || resultCode!=Activity.RESULT_OK)return
         state=State.STARTING
@@ -23,7 +25,7 @@ class ProjectionController(private val platform:ProjectionPlatform,private val e
             state=State.CAPTURING; emit(CaptureEvent.Started)
         } catch(t:Throwable) { emit(CaptureEvent.Error(t.message?:"无法启动录屏")); stop() }
     }
-    @Synchronized fun onResized(width:Int,height:Int) { if(state==State.CAPTURING && width>0 && height>0)emit(CaptureEvent.Resized(width,height)) }
+    @Synchronized fun onResized(width:Int,height:Int) { if(state==State.CAPTURING && width>0 && height>0 && surfaceSize!=(width to height)) { surfaceSize=width to height; emit(CaptureEvent.Resized(width,height)) } }
     @Synchronized fun stop() {
         if(state==State.STOPPED)return
         state=State.STOPPED; val old=session; session=null
