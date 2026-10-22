@@ -2,3 +2,5 @@ c796e485ec8afef4699c5820982e69373171082e62837661b2abfd8b9fb77bca  xiangqi-assist
 ab8f6db4e62a2cca7128056a4f110b9ea8bc05299f606243092bf46bc3cc399e  xiangqi-assistant-0.1.0-source.tar.gz
 b19f898a1cdad6cb1e14de93271a7ba16f77c75ce5adc49932c6863208460278  xiangqi-assistant-0.1.1-arm64.apk
 ad8cb63e2440b17b3988a8d37d83a1187001346fe9ca8c3f78c2a46e2c42dd00  xiangqi-assistant-0.1.1-source.tar.gz
+e47db3eb2c93059d4907fff0a54c92c339f241f1071b473303bcbbcde13bf9d7  xiangqi-assistant-0.1.2-arm64.apk
+57f400517616b985521c763491819ab2d8b58e2a29e1e59559ab41cc37afc835  xiangqi-assistant-0.1.2-source.tar.gz
