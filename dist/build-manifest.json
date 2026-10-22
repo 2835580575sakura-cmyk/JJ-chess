@@ -1,8 +1,8 @@
 {
-  "apk": "xiangqi-assistant-0.1.0-arm64.apk",
-  "apkSha256": "c796e485ec8afef4699c5820982e69373171082e62837661b2abfd8b9fb77bca",
-  "apkBytes": 97295798,
-  "sourceCommit": "c61400ab4c662e69ff301ca1541fd00b24189d83",
+  "apk": "xiangqi-assistant-0.1.1-arm64.apk",
+  "apkSha256": "b19f898a1cdad6cb1e14de93271a7ba16f77c75ce5adc49932c6863208460278",
+  "apkBytes": 60296712,
+  "sourceCommit": "11dba6dbb03f730d8e088dca1d5fc9bc7420f062",
   "certificateSha256": "ae048ccdf941df78a6341dff70b02fa6e721d2a70c5b1724d42e2ed37b885e77",
   "upstream": {
     "engineTag": "Pikafish-2026-09-06",
