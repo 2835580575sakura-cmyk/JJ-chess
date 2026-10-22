@@ -1,0 +1,10 @@
+{
+  "engineTag": "Pikafish-2026-09-06",
+  "engineCommit": "4c17cee11f888ae1d48a9494f2e2239f019f0a1f",
+  "archiveSha256": "41952bbfe2520faceb5902c69e6ab4845cc999841d2b49a95cc1be7867a25e5b",
+  "networkSha256": "7d13d73569a9b571ba0eb20cf1596247bc2a42738967e61afef6482b231e900e",
+  "networkBytes": 50706378,
+  "networkSource": "https://github.com/official-pikafish/Pikafish/releases/tag/Pikafish-2026-09-06",
+  "networkLicense": "NNUE-License.md",
+  "ndk": "28.2.13676358"
+}

@@ -1,5 +1,7 @@
 .gradle/
+.kotlin/
 **/build/
+**/.cxx/
 .build/
 .superpowers/
 .local-signing/
