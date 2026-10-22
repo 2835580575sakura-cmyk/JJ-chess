@@ -9,6 +9,8 @@ import android.provider.Settings
 import android.view.*
 import android.widget.*
 import dev.sakura.xiangqi.core.*
+import dev.sakura.xiangqi.vision.GridLocator
+import dev.sakura.xiangqi.vision.TemplateClassifier
 import kotlinx.coroutines.*
 
 class MainActivity:Activity() {
@@ -22,7 +24,7 @@ class MainActivity:Activity() {
         val saved=store.load(); val root=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(dp(20),dp(24),dp(20),dp(20)) }
         setContentView(ScrollView(this).apply { addView(root) })
         root.addView(TextView(this).apply { text="象棋分析助手"; textSize=27f })
-        root.addView(TextView(this).apply { text="适用于 JJ 象棋人机练习。手机离线计算，按箭头手动走棋。\n开始后切换到 JJ；首次识别请点悬浮窗「校验」。"; textSize=15f })
+        root.addView(TextView(this).apply { text="适用于 JJ 象棋人机练习。手机离线计算，按箭头手动走棋。\n开始后切换到 JJ；首次点悬浮窗「校验」。新棋子样式可从标准开局适配一次。"; textSize=15f })
         fun choice(label:String,values:List<String>,selected:Int):Spinner { root.addView(TextView(this).apply { text=label; setPadding(0,dp(12),0,0) }); return Spinner(this).apply { adapter=ArrayAdapter(this@MainActivity,android.R.layout.simple_spinner_dropdown_item,values); setSelection(selected); root.addView(this) } }
         player=choice("我执哪一方",listOf("红方","黑方"),if(saved.playerSide==Side.RED)0 else 1)
         bottom=choice("屏幕下方是哪一方",listOf("红方在下","黑方在下"),if(saved.orientation==Orientation.RED_BOTTOM)0 else 1)
@@ -32,6 +34,7 @@ class MainActivity:Activity() {
         fun button(label:String,action:()->Unit) { root.addView(Button(this).apply { text=label; setOnClickListener { action() } }) }
         button("开始分析") { begin() }
         button("校验棋子 / 当前行棋方") { editBoard() }
+        button("适配棋子（标准开局）") { adaptOpening() }
         button("校准棋盘位置") { calibrate() }
         button("恢复上次历史（需核对当前棋盘）") { restoreCandidate() }
         button("导出棋盘诊断") { exportDiagnostic() }
@@ -39,7 +42,7 @@ class MainActivity:Activity() {
         button("返回 JJ 继续") { if(AssistantRuntime.current!=null)moveTaskToBack(true) else toast("请先开始分析") }
         button("停止录屏和分析") { AssistantRuntime.current?.stop(); status.text="已停止" }
         status=TextView(this).apply { text="尚未开始"; textSize=16f; setPadding(0,dp(16),0,0) }; root.addView(status)
-        root.addView(TextView(this).apply { text="仅针对所提供视频中的木纹棋盘样式。换皮肤、翻转、窗口模式或识别有误时，请校准并逐格校验。"; textSize=13f; setPadding(0,dp(16),0,dp(20)) })
+        root.addView(TextView(this).apply { text="棋子识别失败时，在 JJ 点「重来」，保留 32 枚棋子的标准开局，再回到这里适配。适配会保存，同一棋子样式通常只需一次；换皮肤后请重新适配。中途接入时，请校验棋子和当前行棋方。"; textSize=13f; setPadding(0,dp(16),0,dp(20)) })
     }
     private fun readConfig()=SessionConfig(playerSide=if(player.selectedItemPosition==0)Side.RED else Side.BLACK,movetimeMs=listOf(3000,15000,30000)[budget.selectedItemPosition],orientation=if(bottom.selectedItemPosition==0)Orientation.RED_BOTTOM else Orientation.BLACK_BOTTOM,initialTurn=if(turn.selectedItemPosition==0)Side.RED else Side.BLACK,options=store.load().options.copy(threads=minOf(store.load().options.threads,Runtime.getRuntime().availableProcessors().coerceAtLeast(1))))
     private fun begin() {
@@ -64,7 +67,7 @@ class MainActivity:Activity() {
     private fun toast(message:String) { Toast.makeText(this,message,Toast.LENGTH_LONG).show() }
     private fun editBoard() {
         val runtime=AssistantRuntime.current?:return toast("请先开始分析")
-        val state=runtime.coordinator.state.value; val initial=state.position?:return toast("请先返回 JJ，等待棋盘稳定后再校验")
+        val state=runtime.coordinator.state.value; val initial=state.position?:return recognitionRecovery()
         val cal=state.calibration?:return toast("尚未找到棋盘，请先校准")
         val editor=BoardEditorState(initial); val root=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(dp(8),0,dp(8),0) }
         root.addView(TextView(this).apply { text="逐格核对，点棋子可修改。轮到谁走必须手动确认。" })
@@ -81,6 +84,74 @@ class MainActivity:Activity() {
             val index=if(indices.isNotEmpty()&&restore.selectedItemPosition>0)indices[restore.selectedItemPosition-1] else null
             scope.launch { runtime.coordinator.confirm(snapshot,cal,index).join(); val result=runtime.coordinator.state.value; if(result.phase==SessionPhase.ERROR)error.text=result.message else { dialog.dismiss(); moveTaskToBack(true) } }
         } }; dialog.show()
+    }
+    private fun recognitionRecovery() {
+        AlertDialog.Builder(this).setTitle("棋子尚未识别")
+            .setMessage("可以从标准开局适配当前棋子样式。请先在 JJ 点「重来」，保留 32 枚棋子的开局画面；如果棋盘网格位置不对，请校准棋盘。")
+            .setPositiveButton("适配标准开局") { _,_ -> adaptOpening() }
+            .setNeutralButton("校准棋盘") { _,_ -> calibrate() }
+            .setNegativeButton("取消",null).show()
+    }
+    private fun adaptOpening() {
+        val runtime=AssistantRuntime.current?:return toast("请先开始分析")
+        val frame=runtime.preview?:return toast("请先切换到 JJ，点「重来」保留标准开局，再回到助手")
+        val located=GridLocator.locate(frame)?:runtime.coordinator.state.value.calibration?:return toast("未找到棋盘，请先校准")
+        val (w,h)=runtime.overlay.screenSize(); val r=located.captureRect
+        val current=located.copy(orientation=runtime.config.orientation,displayRect=FloatRect(r.left*w/frame.width,r.top*h/frame.height,r.right*w/frame.width,r.bottom*h/frame.height))
+        val view=CalibrationView(this,frame,current)
+        val root=LinearLayout(this).apply {
+            orientation=LinearLayout.VERTICAL; setPadding(dp(8),0,dp(8),0)
+            addView(TextView(this@MainActivity).apply { text="请先在 JJ 点「重来」，确认下方预览是 32 枚棋子的标准开局，轮到红方走。中途局面不能用于适配。\n拖动蓝色两角，对齐左上和右下棋盘交点，不含外框。" })
+            addView(view,LinearLayout.LayoutParams(-1,(resources.displayMetrics.heightPixels*.55f).toInt()))
+        }
+        val error=TextView(this); root.addView(error)
+        val dialog=AlertDialog.Builder(this).setTitle("适配当前棋子样式")
+            .setView(ScrollView(this).apply { addView(root) }).setNegativeButton("取消",null)
+            .setPositiveButton("确认标准开局并适配",null).create()
+        var adaptationJob:Job?=null; var activeOperation:Job?=null
+        dialog.setOnDismissListener { activeOperation?.cancel(); adaptationJob?.cancel() }
+        dialog.setOnShowListener {
+            val submit=dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            submit.setOnClickListener {
+                submit.isEnabled=false; error.text="正在适配棋子…"
+                val selected=view.rect
+                val calibrated=current.copy(captureRect=selected,displayRect=FloatRect(selected.left*w/frame.width,selected.top*h/frame.height,selected.right*w/frame.width,selected.bottom*h/frame.height))
+                adaptationJob=scope.launch {
+                    try {
+                        val adapted=withContext(Dispatchers.Default) { TemplateClassifier.fromOpening(frame,calibrated) }.getOrElse {
+                            error.text=it.message?:"适配失败，请检查开局与棋盘交点"; return@launch
+                        }
+                        currentCoroutineContext().ensureActive()
+                        if(!dialog.isShowing || AssistantRuntime.current!==runtime) { error.text="会话已停止，请重新开始"; return@launch }
+                        activeOperation=runtime.coordinator.useTemplates(adapted,calibrated)
+                        activeOperation!!.join(); activeOperation=null
+                        currentCoroutineContext().ensureActive()
+                        val prepared=runtime.coordinator.state.value
+                        if(prepared.phase==SessionPhase.ERROR || prepared.phase==SessionPhase.STOPPED || AssistantRuntime.current!==runtime) {
+                            error.text=prepared.message; return@launch
+                        }
+                        val confirmedCalibration=requireNotNull(prepared.calibration) { "尚未找到棋盘，请先校准" }
+                        val opening=FenCodec.decode(START_FEN).getOrThrow()
+                        if(!dialog.isShowing)return@launch
+                        activeOperation=runtime.coordinator.confirm(opening,confirmedCalibration)
+                        activeOperation!!.join(); activeOperation=null
+                        currentCoroutineContext().ensureActive()
+                        val result=runtime.coordinator.state.value
+                        if(result.phase==SessionPhase.ERROR || result.phase==SessionPhase.STOPPED || AssistantRuntime.current!==runtime) {
+                            error.text=result.message; return@launch
+                        }
+                        check(result.position?.board==opening.board && result.position?.sideToMove==Side.RED) { "开局尚未确认，请重试" }
+                        if(!dialog.isShowing)return@launch
+                        TemplateStore(filesDir).save(adapted)
+                        store.saveCalibration(confirmedCalibration,frame.width,frame.height,w,h)
+                        adaptationJob=null; dialog.dismiss(); toast("适配已保存，返回 JJ 后自动识别并分析"); moveTaskToBack(true)
+                    } catch(e:CancellationException) { throw e }
+                    catch(e:Exception) { error.text=e.message?:"适配失败，请重试" }
+                    finally { activeOperation?.cancel(); activeOperation=null; submit.isEnabled=true }
+                }
+            }
+        }
+        dialog.show()
     }
     private fun calibrate() {
         val runtime=AssistantRuntime.current?:return toast("请先开始分析")

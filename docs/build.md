@@ -36,4 +36,6 @@ python3 -m unittest discover -s engine/src/test/python -p test_*.py -v
 
 `EngineSmokeTest` 跨真实 Binder/JNI 执行搜索与取消；`AssistantFlowTest` 在调试专用非导出 Activity 上绘制棋盘样本，走真实 MediaProjection/识别/搜索/悬浮链路。后者默认有显式运行条件，需要人工授权，不能硬编码系统录屏令牌。调试 Activity 无桌面入口，不能从外部应用启动。
 
-`tools/package-source.py` 在提交后从 Git 跟踪文件生成源码包，并加入匹配网络及构建清单；不枚举整个工作区，不包含钥匙、缓存、原始视频或环境凭证。发布 APK 时应同时保留对应源码、GPL 和独立权重许可。
+`tools/package-source.py` 在提交后从 Git 跟踪文件生成源码包，并加入匹配网络及构建清单；排除所有已发布的 dist APK、旧源码包及校验文件，包名跟随 Android versionName；不枚举整个工作区，不包含钥匙、缓存、原始视频或环境凭证。发布 APK 时应同时保留对应源码、GPL 和独立权重许可。
+
+源码包筛选回归：`python3 -m unittest discover -s tools/tests -v`。

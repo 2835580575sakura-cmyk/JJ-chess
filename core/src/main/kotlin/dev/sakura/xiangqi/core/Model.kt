@@ -33,4 +33,5 @@ const val START_FEN = "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKAB
 @Serializable data class PositionSnapshot(val board: Board, val sideToMove: Side, val halfmoveClock: Int = 0, val fullmoveNumber: Int = 1)
 @Serializable data class PositionHistory(val initialFen: String, val moves: List<UciMove>, val historyComplete: Boolean)
 @Serializable data class ConfirmedPosition(val snapshot: PositionSnapshot, val history: PositionHistory, val positionRevision: Long)
-data class BoardObservation(val board: Board?, val confidence: List<Float>, val timestampNs: Long, val motion: Float = 0f, val occluded: Boolean = false)
+enum class RecognitionIssue { NONE, OUT_OF_BOUNDS, RIVER_OBSTRUCTION, UNKNOWN_CELLS }
+data class BoardObservation(val board: Board?, val confidence: List<Float>, val timestampNs: Long, val motion: Float = 0f, val occluded: Boolean = false, val recognitionIssue: RecognitionIssue = RecognitionIssue.NONE, val unknownCellCount: Int = 0)

@@ -8,6 +8,12 @@ import org.robolectric.annotation.Config
 import dev.sakura.xiangqi.core.*
 @RunWith(RobolectricTestRunner::class) @Config(sdk=[34],manifest=Config.NONE)
 class SettingsStoreTest {
+    @Test fun legacyCalibrationDoesNotOverrideNewPhoneGridDetection() {
+        val context=RuntimeEnvironment.getApplication()
+        val legacy="""{"calibration":{"captureRect":{"left":40.0,"top":366.0,"right":545.0,"bottom":909.0},"displayRect":{"left":40.0,"top":366.0,"right":545.0,"bottom":909.0}},"frameWidth":576,"frameHeight":1280,"displayWidth":576,"displayHeight":1280}"""
+        context.getSharedPreferences("assistant",0).edit().putString("calibration",legacy).commit()
+        assertNull(SettingsStore(context).loadCalibration(576,1280,576,1280,Orientation.RED_BOTTOM))
+    }
     @Test fun settingsPersistAcrossInstances() {
         val context=RuntimeEnvironment.getApplication()
         val config=SessionConfig(playerSide=Side.BLACK,movetimeMs=30000,orientation=Orientation.BLACK_BOTTOM)

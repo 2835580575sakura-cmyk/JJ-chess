@@ -28,7 +28,8 @@ class SessionCoordinator(
     private val scope:CoroutineScope,private val gateway:EngineGateway,private val overlay:HintOverlay,
     private val screenSize:()->Pair<Int,Int> = {576 to 1280},
     private val restoreCalibration:(PixelFrame)->GridCalibration?={null},
-    private val onConfirmed:(ConfirmedPosition)->Unit={}
+    private val onConfirmed:(ConfirmedPosition)->Unit={},
+    classifier:TemplateClassifier=TemplateClassifier.fromResource()
 ) {
     var diagnosticSample:DiagnosticSample?=null; private set
     private val mutable=MutableStateFlow(SessionState())
@@ -36,7 +37,7 @@ class SessionCoordinator(
     private val mutex=Mutex()
     private val tracker=GameTracker()
     private val stable=StabilityGate()
-    private val recognizer by lazy { BoardRecognizer(TemplateClassifier.fromResource()) }
+    private var recognizer=BoardRecognizer(classifier)
     private val frames=Channel<PixelFrame>(Channel.CONFLATED)
     private val operations=ConcurrentHashMap.newKeySet<Job>()
     private var config=SessionConfig()
@@ -77,6 +78,12 @@ class SessionCoordinator(
         mutable.value=mutable.value.copy(phase=phase,message=message,failureReason=null)
         overlay.status(message)
     }
+    private fun recognitionMessage(observation:BoardObservation):String = when(observation.recognitionIssue) {
+        RecognitionIssue.OUT_OF_BOUNDS -> "棋盘位置超出画面，请点「校验」后校准棋盘"
+        RecognitionIssue.RIVER_OBSTRUCTION -> "棋盘中央有遮挡或动画，请移开遮挡后稍候"
+        RecognitionIssue.UNKNOWN_CELLS -> (if(observation.unknownCellCount>0)"有 ${observation.unknownCellCount} 个位置未识别" else "有位置未识别")+"，请点「校验」适配棋子或校准棋盘"
+        RecognitionIssue.NONE -> if(observation.motion>.10f)"棋子或动画正在变化，等待稳定棋盘" else "未能识别棋盘，请点「校验」检查棋盘位置与棋子样式"
+    }
     private suspend fun stillRunning() { currentCoroutineContext().ensureActive(); check(!stopped) { "会话已停止" } }
     fun start(config:SessionConfig)=launch {
         check(!closed && stopped)
@@ -106,10 +113,10 @@ class SessionCoordinator(
         val observation=withContext(Dispatchers.Default) { recognizer.recognize(frame,calibration) }
         stillRunning()
         val expected=manualBaseline?:tracker.current?.snapshot?.board
-        if(observation.board!=expected || observation.occluded || observation.motion>.10f) {
+        if(observation.board==null || observation.board!=expected || observation.occluded || observation.motion>.10f) {
             invalidate()
             if(manualBaseline!=null) { manualBaseline=null; needsReconfirm=true }
-            if(observation.board==null||observation.occluded)update(SessionPhase.WAITING_BOARD,"画面不清晰，等待稳定棋盘")
+            if(observation.board==null||observation.occluded||observation.motion>.10f)update(SessionPhase.WAITING_BOARD,recognitionMessage(observation))
         }
         stable.accept(observation)?.let {
             if(it.board!=null && FenCodec.decode(FenCodec.encode(PositionSnapshot(it.board!!,config.initialTurn))).isSuccess)diagnosticSample=DiagnosticSample(frame,calibration)
@@ -132,7 +139,7 @@ class SessionCoordinator(
         if(board==null || observation.occluded || observation.motion>.10f) {
             invalidate()
             if(manualBaseline!=null) { manualBaseline=null; needsReconfirm=true }
-            update(SessionPhase.WAITING_BOARD,"画面不清晰，等待稳定棋盘"); return
+            update(SessionPhase.WAITING_BOARD,recognitionMessage(observation)); return
         }
         lastRawBoard=board
         if(mutable.value.calibration?.transformRevision!=calibration.transformRevision) {
@@ -249,6 +256,16 @@ class SessionCoordinator(
         invalidate(); recognizer.reset(); stable.reset(); manualBaseline=null; needsReconfirm=true; confirmedDuringPause=false
         mutable.value=mutable.value.copy(calibration=calibration.copy(transformRevision=++transform))
         overlay.setCalibration(mutable.value.calibration!!); update(SessionPhase.NEEDS_SYNC,"标定已更新，请重新校验棋盘")
+    }
+    fun useTemplates(classifier:TemplateClassifier,calibration:GridCalibration)=launch {
+        if(stopped)return@launch
+        require(paused) { "请先暂停再适配棋子" }
+        invalidate(); stillRunning(); recognizer=BoardRecognizer(classifier); stable.reset()
+        lastRawBoard=null; manualBaseline=null; diagnosticSample=null
+        needsReconfirm=true; confirmedDuringPause=false
+        mutable.value=mutable.value.copy(position=null,calibration=calibration.copy(transformRevision=++transform),pendingHistoryIndices=emptyList())
+        overlay.setCalibration(mutable.value.calibration!!)
+        update(SessionPhase.PAUSED,"棋子已适配，请确认开局后返回 JJ")
     }
     fun invalidateCoordinates():Job=stop()
     @Synchronized fun stop():Job {

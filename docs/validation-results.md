@@ -5,11 +5,12 @@
 | 检查 | 结果 | 实际覆盖 |
 |---|---|---|
 | core | 19 通过 | FEN、90 格坐标、双方翻转、规则历史与中文走法 |
-| vision | 13 通过 | 人工标注的校准/保留样本全部 90 格，缩放、翻转、JPEG 干扰，吃子动画拒绝，稳定帧门控 |
+| vision | 22 通过 | 人工标注的校准/保留样本全部 90 格，缩放、翻转、JPEG 干扰，吃子动画拒绝，稳定帧门控 |
 | engine JVM | 14 通过 | 搜索串行取消、完整 key 协议、权重校验、复制中断和模拟存储失败 |
-| app JVM/Robolectric API34 | 42 通过 | 生命周期、采样隔离、旧结果拒绝、走法合法性、轮次、断连、暂停、恢复候选、设置/校准保存、资源策略和诊断导出 |
+| app JVM/Robolectric API34 | 51 通过 | 生命周期、采样隔离、旧结果拒绝、走法合法性、轮次、断连、暂停、恢复候选、设置/校准保存、资源策略和诊断导出 |
 | 宿主机实际 Pikafish | 10 通过 | 真装载匹配 NNUE，初始合法走法、双方、马腿、炮架、将帅、应将、非法历史、终局、损坏权重拒绝及实际搜索 |
 | JNI 分配故障模拟 | 8 通过 | 编译生产 jni_bridge.cpp，使用测试 shim 注入数组、字符串、全局引用、类查找及 C++ 分配失败；不代表 ART 真机执行 |
+| 源码打包筛选 | 1 通过 | 排除已跟踪的旧 APK / 源码包，包含当前源码、NNUE 和构建清单 |
 | APK assembleDebug | 通过 | NDK 实际 ARM64 两个引擎变体及基线分发库，离线权重已打包 |
 | 测试 APK assembleDebugAndroidTest | 通过编译 | 包含真实 Binder/JNI 和人工授权录屏流程测试；未执行设备测试 |
 | APK 校验 | 通过 | apksigner 签名、zipalign 16 KiB、全部 ELF PT_LOAD 16 KiB、ARM64-only、权重 SHA-256、无联网/无障碍权限、无私钥、含许可证 |
@@ -21,8 +22,11 @@
 ```sh
 ./tools/dev.sh ./gradlew :core:test :vision:test :engine:testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest --console=plain
 python3 -m unittest discover -s engine/src/test/python -p 'test_*.py' -v
+python3 -m unittest discover -s tools/tests -v
 ./tools/verify-apk.sh app/build/outputs/apk/debug/app-debug.apk
 ```
+
+0.1.1 新增缩窄棋盘与金色底色回放、开局适配与保留样本全部 90 格、未知格原因与恢复入口、模板保存、旧校准迁移及拖动手势验证。完整说明见 [recognition-recovery.md](recognition-recovery.md)。APK 包名不变，versionCode 2 / versionName 0.1.1，与 0.1.0 签名证书相同。
 
 源码对应修复验证：先写失败测试，再实现设置/校准持久化及初次同尺寸回调过滤，最后整套构建通过。校准仅在捕获尺寸、物理显示尺寸及底方均相同时复用，复用校准不复用上一局确认。
 
@@ -30,7 +34,7 @@ python3 -m unittest discover -s engine/src/test/python -p 'test_*.py' -v
 
 录像只有一个主题和有限对局，识别结果不能外推到其他 JJ 主题、字体、全部残局或所有动画。行棋方来自用户确认和连续合法走法，不能从单张图片推断。历史不完整会明确显示，重复局面判断可能受限。
 
-第一版只请求整屏录制以固定物理坐标；默认不写整屏图片，诊断只接受已识别稳定棋盘。没有 Root、无障碍点击和自动落子。严重温控需要用户降温后手动继续；内存回退后需用户重新开始，不无限自动重启。
+第一版只请求整屏录制以固定物理坐标；默认不写整屏图片，诊断只接受已识别稳定棋盘。适配预览只在内存保留，保存的是字形特征。没有 Root、无障碍点击和自动落子。严重温控需要用户降温后手动继续；内存回退后需用户重新开始，不无限自动重启。
 
 云环境的 install_script 和 start_skill 已保存为配置草稿；当前构建已验证，发布环境快照仍由用户在环境设置中执行，尚未声称发布成功。
 

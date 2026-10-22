@@ -19,10 +19,15 @@ class CalibrationView(context:Context,frame:PixelFrame,calibration:GridCalibrati
     }
     override fun onTouchEvent(e:MotionEvent):Boolean {
         val x=((e.x-offsetX)/scale).coerceIn(1f,bitmap.width-2f); val y=((e.y-offsetY)/scale).coerceIn(1f,bitmap.height-2f)
-        if(e.action==MotionEvent.ACTION_DOWN)selected=if(hypot(x-rect.left,y-rect.top)<hypot(x-rect.right,y-rect.bottom))0 else 1
-        if(e.action==MotionEvent.ACTION_MOVE || e.action==MotionEvent.ACTION_UP) {
+        if(e.actionMasked==MotionEvent.ACTION_DOWN) {
+            parent?.requestDisallowInterceptTouchEvent(true)
+            selected=if(hypot(x-rect.left,y-rect.top)<hypot(x-rect.right,y-rect.bottom))0 else 1
+        }
+        if(e.actionMasked==MotionEvent.ACTION_MOVE || e.actionMasked==MotionEvent.ACTION_UP) {
             rect=if(selected==0)FloatRect(min(x,rect.right-80),min(y,rect.bottom-90),rect.right,rect.bottom) else FloatRect(rect.left,rect.top,max(x,rect.left+80),max(y,rect.top+90))
             invalidate()
-        }; return true
+        }
+        if(e.actionMasked==MotionEvent.ACTION_UP || e.actionMasked==MotionEvent.ACTION_CANCEL)parent?.requestDisallowInterceptTouchEvent(false)
+        return true
     }
 }

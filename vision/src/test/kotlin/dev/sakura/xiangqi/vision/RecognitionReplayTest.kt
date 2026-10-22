@@ -53,6 +53,25 @@ class RecognitionReplayTest {
         val actual=BoardRecognizer(TemplateClassifier.fromResource()).recognize(full,found)
         assertEquals(FenCodec.decode(labels.getProperty("cal6")).getOrThrow().board,actual.board)
     }
+    @Test fun automaticCalibrationHandlesNarrowerPhoneGrid() {
+        // Same portrait aspect ratio, but the app's board is 1.8% narrower.
+        val board=frame("cal6").resized(558,615)
+        val pixels=IntArray(576*1280){0xff223322.toInt()}
+        for(y in 0 until board.height) board.argb.copyInto(pixels,(y+329)*576+8,y*board.width,(y+1)*board.width)
+        val full=PixelFrame(576,1280,pixels,0)
+        val found=requireNotNull(GridLocator.locate(full))
+        val actual=BoardRecognizer(TemplateClassifier.fromResource()).recognize(full,found)
+        assertEquals("calibration=$found confidence=${actual.confidence}",FenCodec.decode(labels.getProperty("cal6")).getOrThrow().board,actual.board)
+    }
+    @Test fun goldenDisksAreNotMistakenForRedInk() {
+        val input=frame("cal6")
+        val golden=input.copy(argb=input.argb.map { color ->
+            val r=color ushr 16 and 255; val g=color ushr 8 and 255; val b=color and 255
+            if(r>130 && g>130 && r-g>7 && g-b>17) 0xffeb9637.toInt() else color
+        }.toIntArray())
+        val actual=BoardRecognizer(TemplateClassifier.fromResource()).recognize(golden,calibration)
+        assertEquals(FenCodec.decode(labels.getProperty("cal6")).getOrThrow().board,actual.board)
+    }
     @Test fun compressedBoardKeepsLabels() {
         val image=ImageIO.read(javaClass.getResourceAsStream("/jj/cal10.png"))
         val bytes=java.io.ByteArrayOutputStream(); ImageIO.write(image,"jpg",bytes)

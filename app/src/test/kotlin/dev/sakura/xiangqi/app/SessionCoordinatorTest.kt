@@ -34,6 +34,18 @@ class SessionCoordinatorTest {
     }
     private val initial=FenCodec.decode(START_FEN).getOrThrow()
     private val cal=GridCalibration(FloatRect(40f,366f,545f,909f),FloatRect(40f,366f,545f,909f),transformRevision=1)
+    @Test fun adaptingWhilePausedWaitsForMatchingFreshBoardBeforeSearching()=runTest {
+        val g=Gateway(); val o=Overlay(); val c=SessionCoordinator(backgroundScope,g,o)
+        c.start(SessionConfig()).join(); c.pause().join()
+        c.useTemplates(dev.sakura.xiangqi.vision.TemplateClassifier.fromResource(),cal).join()
+        assertNull(c.state.value.position); assertNull(c.state.value.key); assertTrue(g.requests.isEmpty())
+        c.confirm(initial,c.state.value.calibration!!).join(); runCurrent()
+        assertTrue(g.requests.isEmpty()); assertNull(o.hint)
+        c.resume().join(); runCurrent(); assertTrue(g.requests.isEmpty())
+        c.onObservation(BoardObservation(initial.board,List(90){1f},10),c.state.value.calibration!!).join(); runCurrent()
+        assertEquals(1,g.requests.size); assertEquals(START_FEN,g.requests.single().history.initialFen)
+        assertTrue(c.state.value.historyComplete); c.stop().join()
+    }
     @Test fun staleResultsRejectedForAllFourVersions()=runTest {
         val gateway=Gateway(); val overlay=Overlay(); val c=SessionCoordinator(backgroundScope,gateway,overlay)
         c.start(SessionConfig()).join(); c.confirm(initial,cal).join(); runCurrent()
@@ -116,6 +128,37 @@ class SessionCoordinatorTest {
         g.events.emit(EngineEvent.BestMove(c.state.value.key!!,UciMove.parse("b0c2"))); runCurrent(); val old=c.state.value.message
         c.onObservation(BoardObservation(null,List(90){0f},1,occluded=true),cal).join()
         assertNull(o.hint); assertNotEquals(SessionPhase.READY,c.state.value.phase); assertNotEquals(old,c.state.value.message); assertNotEquals(old,o.message); c.stop().join()
+    }
+    @Test fun unknownCellsGiveRecoveryActionWithoutSearchingOrKeepingOldHint()=runTest {
+        val g=Gateway(); val o=Overlay(); val c=SessionCoordinator(backgroundScope,g,o)
+        c.start(SessionConfig()).join(); c.confirm(initial,cal).join(); runCurrent()
+        g.events.emit(EngineEvent.BestMove(c.state.value.key!!,UciMove.parse("b0c2"))); runCurrent()
+        assertNotNull(o.hint)
+        repeat(4) { sample ->
+            c.onObservation(BoardObservation(null,List(90){if(it<3)0f else 1f},sample.toLong()+1,occluded=true,recognitionIssue=RecognitionIssue.UNKNOWN_CELLS,unknownCellCount=3),cal).join()
+            assertTrue(c.state.value.message,c.state.value.message.contains("3 个位置未识别"))
+            assertTrue(c.state.value.message,c.state.value.message.contains("校验"))
+            assertNull(o.hint); assertNull(c.state.value.key)
+        }
+        runCurrent(); assertEquals(1,g.requests.size); assertEquals(1,g.rulesCalls); c.stop().join()
+    }
+    @Test fun movingBoardSaysAnimationInsteadOfUnreadableImage()=runTest {
+        val g=Gateway(); val o=Overlay(); val c=SessionCoordinator(backgroundScope,g,o)
+        c.start(SessionConfig()).join()
+        c.onObservation(BoardObservation(initial.board,List(90){1f},1,motion=.3f),cal).join()
+        assertTrue(c.state.value.message,c.state.value.message.contains("动画"))
+        assertTrue(g.requests.isEmpty()); assertNull(o.hint); c.stop().join()
+    }
+    @Test fun invalidCalibrationAndObstructionOfferDifferentRecoveryInstructions()=runTest {
+        val g=Gateway(); val o=Overlay(); val c=SessionCoordinator(backgroundScope,g,o)
+        c.start(SessionConfig()).join()
+        c.onObservation(BoardObservation(null,List(90){0f},1,occluded=true,recognitionIssue=RecognitionIssue.OUT_OF_BOUNDS),cal).join()
+        val bounds=c.state.value.message
+        assertTrue(bounds,bounds.contains("校准棋盘"))
+        c.onObservation(BoardObservation(null,List(90){0f},2,motion=1f,occluded=true,recognitionIssue=RecognitionIssue.RIVER_OBSTRUCTION),cal).join()
+        assertTrue(c.state.value.message,c.state.value.message.contains("遮挡"))
+        assertNotEquals(bounds,c.state.value.message)
+        assertTrue(g.requests.isEmpty()); assertNull(o.hint); c.stop().join()
     }
     @Test fun stopInterruptsValidationBeforeItsBarrierIsReleased()=runTest {
         val g=Gateway().apply { validationBarrier=CompletableDeferred() }; val o=Overlay(); val c=SessionCoordinator(backgroundScope,g,o)
