@@ -39,9 +39,9 @@ class NativeEngine(network: File, options: EngineOptions) : NativeEnginePort {
         check(pointer!=0L)
         NativeBindings.start(pointer,request.history.initialFen,request.history.moves.map { it.toString() }.toTypedArray(),request.movetimeMs,NativeLineListener { line -> parseLine(request.key,line)?.let(callback) })
     }
-    override fun requestStop() { NativeBindings.stop(pointer) }
+    @Synchronized override fun requestStop() { NativeBindings.stop(pointer) }
     override fun awaitStopped() { NativeBindings.await(pointer) }
-    override fun close() { val p=pointer; if(p!=0L) { NativeBindings.destroy(p); pointer=0 } }
+    @Synchronized override fun close() { val p=pointer; if(p!=0L) { NativeBindings.destroy(p); pointer=0 } }
     companion object {
         fun parseLine(key: AnalysisKey,line: String): EngineEvent? = runCatching {
             val words=line.trim().split(Regex("\\s+"))
