@@ -18,3 +18,13 @@ dependencies {
     testImplementation(libs.junit); testImplementation(libs.robolectric); testImplementation(libs.coroutines.test)
     androidTestImplementation("androidx.test:runner:1.6.2"); androidTestImplementation("androidx.test:rules:1.6.1"); androidTestImplementation(libs.junit)
 }
+tasks.withType<Test>().configureEach {
+    systemProperty("robolectric.dependency.repo.url","https://repo.maven.apache.org/maven2")
+    systemProperty("maven.repo.local","/workspace/.toolchains/robolectric-cache")
+    val testHome = rootProject.layout.buildDirectory.dir("robolectric-home").get().asFile.apply { mkdirs() }
+    systemProperty("user.home",testHome.absolutePath)
+    if (file("/etc/codex/network-policy.json").exists()) {
+        systemProperty("https.proxyHost","proxy"); systemProperty("https.proxyPort","8080")
+        systemProperty("http.proxyHost","proxy"); systemProperty("http.proxyPort","8080")
+    }
+}
