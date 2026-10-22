@@ -2,6 +2,11 @@
 
 Android 10+、ARM64、离线运行，面向 iQOO Neo9S Pro+ 上 JJ 象棋的人机练习。读取录屏画面，识别稳定局面，用 Pikafish 给出箭头和中文走法；由你手动落子。无需电脑、Root 或无障碍权限。
 
+手机下载安装：[APK 直链](https://github.com/2835580575sakura-cmyk/JJ-chess/raw/refs/heads/main/dist/xiangqi-assistant-0.1.0-arm64.apk) · [对应源码包](https://github.com/2835580575sakura-cmyk/JJ-chess/raw/refs/heads/main/dist/xiangqi-assistant-0.1.0-source.tar.gz) · [SHA-256 校验清单](dist/SHA256SUMS.txt)。如果聊天应用不能下载，可复制 APK 链接到手机系统浏览器打开。
+
+APK 与源码包均保存在仓库 `dist/`。构建清单中的 `sourceCommit` 指向生成该版本的代码提交；后续分发提交只加入安装包和下载说明。
+
+
 **当前交付为待真机验收的首版。** 云端已验证构建、录像样本识别和真实引擎搜索；尚未在目标手机上执行录屏、悬浮穿透或温度测试。识别器适配所提供视频的木纹棋盘皮肤，不能保证其他皮肤、分屏和所有动画都能识别。
 
 ## 安装与使用

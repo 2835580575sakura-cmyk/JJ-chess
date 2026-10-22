@@ -1,0 +1,29 @@
+{
+  "apk": "xiangqi-assistant-0.1.0-arm64.apk",
+  "apkSha256": "c796e485ec8afef4699c5820982e69373171082e62837661b2abfd8b9fb77bca",
+  "apkBytes": 97295798,
+  "sourceCommit": "c61400ab4c662e69ff301ca1541fd00b24189d83",
+  "certificateSha256": "ae048ccdf941df78a6341dff70b02fa6e721d2a70c5b1724d42e2ed37b885e77",
+  "upstream": {
+    "engineTag": "Pikafish-2026-09-06",
+    "engineCommit": "4c17cee11f888ae1d48a9494f2e2239f019f0a1f",
+    "archiveSha256": "41952bbfe2520faceb5902c69e6ab4845cc999841d2b49a95cc1be7867a25e5b",
+    "networkSha256": "7d13d73569a9b571ba0eb20cf1596247bc2a42738967e61afef6482b231e900e",
+    "networkBytes": 50706378,
+    "networkSource": "https://github.com/official-pikafish/Pikafish/releases/tag/Pikafish-2026-09-06",
+    "networkLicense": "NNUE-License.md",
+    "ndk": "28.2.13676358"
+  },
+  "abis": [
+    "arm64-v8a"
+  ],
+  "nativeLibraries": [
+    "lib/arm64-v8a/libcpu_dispatch.so",
+    "lib/arm64-v8a/libpikafish_base.so",
+    "lib/arm64-v8a/libpikafish_dotprod.so"
+  ],
+  "signatureVerified": true,
+  "zip16KiBVerified": true,
+  "elf16KiBVerified": true,
+  "deviceTests": "not run; no Android device attached"
+}

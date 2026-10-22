@@ -1,0 +1,3 @@
+12bc57f475aaf19c63b9208c5f5a1daeef38e1c55e54220a3ab7beadcc530585  build-manifest.json
+c796e485ec8afef4699c5820982e69373171082e62837661b2abfd8b9fb77bca  xiangqi-assistant-0.1.0-arm64.apk
+ab8f6db4e62a2cca7128056a4f110b9ea8bc05299f606243092bf46bc3cc399e  xiangqi-assistant-0.1.0-source.tar.gz
