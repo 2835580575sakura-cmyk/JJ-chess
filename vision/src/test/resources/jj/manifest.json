@@ -1,0 +1,49 @@
+{
+  "sourceFile": "a6a8e0be1bfc650b00696209446b7cd0.mp4",
+  "crop": [
+    8,
+    330,
+    576,
+    945
+  ],
+  "grid": [
+    32,
+    36,
+    537,
+    579
+  ],
+  "annotations": "Manually read from supplied video; opening template labels follow standard start position",
+  "samples": [
+    {
+      "name": "start",
+      "seconds": 2,
+      "group": "training"
+    },
+    {
+      "name": "cal6",
+      "seconds": 6,
+      "group": "calibration"
+    },
+    {
+      "name": "cal10",
+      "seconds": 10,
+      "group": "calibration"
+    },
+    {
+      "name": "holdout8",
+      "seconds": 8.5,
+      "group": "holdout"
+    },
+    {
+      "name": "animation18",
+      "seconds": 18,
+      "group": "animation"
+    },
+    {
+      "name": "animation27",
+      "seconds": 27,
+      "group": "animation"
+    }
+  ],
+  "turnNotAnnotated": true
+}
