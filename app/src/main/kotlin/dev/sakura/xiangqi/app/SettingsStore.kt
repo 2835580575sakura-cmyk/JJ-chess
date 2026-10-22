@@ -8,6 +8,7 @@ import kotlinx.serialization.json.Json
 class SettingsStore(context:Context) {
     private val prefs=context.getSharedPreferences("assistant",Context.MODE_PRIVATE)
     fun load():SessionConfig=runCatching { Json.decodeFromString<SessionConfig>(prefs.getString("config",null)?:return SessionConfig()) }.getOrDefault(SessionConfig())
+    fun clearCalibration() { prefs.edit().remove("calibration").apply() }
     fun saveCalibration(calibration:GridCalibration,frameWidth:Int,frameHeight:Int,displayWidth:Int,displayHeight:Int) {
         require(calibration.isValid()); require(calibration.captureRect.right<frameWidth && calibration.captureRect.bottom<frameHeight && calibration.displayRect.right<displayWidth && calibration.displayRect.bottom<displayHeight)
         prefs.edit().putString("calibration",Json.encodeToString(SavedCalibration(calibration,frameWidth,frameHeight,displayWidth,displayHeight))).apply()

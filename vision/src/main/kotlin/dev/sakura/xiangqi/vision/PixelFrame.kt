@@ -1,6 +1,6 @@
 package dev.sakura.xiangqi.vision
 import kotlin.math.*
-data class PixelFrame(val width: Int,val height: Int,val argb: IntArray,val timestampNs: Long) {
+data class PixelFrame(val width: Int,val height: Int,val argb: IntArray,val timestampNs: Long,val sampleGeneration:Long=0) {
     init { require(width in 1..8192 && height in 1..8192 && argb.size.toLong()==width.toLong()*height) }
     fun pixel(x: Int,y: Int)=argb[y.coerceIn(0,height-1)*width+x.coerceIn(0,width-1)]
     fun rgb(x: Float,y: Float):FloatArray {

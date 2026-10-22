@@ -60,11 +60,16 @@ class OverlayController(private val context:Context,private val action:(OverlayA
     override fun setCalibration(calibration:GridCalibration) { require(calibration.isValid()); this.calibration=calibration; store.transformChanged(calibration.transformRevision); arrow.calibration=calibration; if(store.current==null)arrow.visibility=View.GONE; positionPanel() }
     override fun show(key:AnalysisKey,move:UciMove,text:String):Boolean {
         if(calibration?.transformRevision!=key.transformRevision || !ensure())return false
-        store.put(MoveHint(key,move,text)); arrow.hint=store.current; arrow.visibility=View.VISIBLE; arrow.invalidate(); this.text.text=text; return true
+        store.put(MoveHint(key,move,text)); arrow.hint=store.current; arrow.visibility=if(store.visible!=null)View.VISIBLE else View.GONE; arrow.invalidate(); this.text.text=text; return true
     }
-    override fun clear() { store.clear(); arrow.hint=null; arrow.visibility=View.GONE; arrow.invalidate() }
-    override fun hideForSample() { arrow.visibility=View.GONE }
-    override fun restore(key:AnalysisKey):Boolean { val h=store.current?:return false; if(h.key!=key || !attached)return false; arrow.hint=h; arrow.visibility=View.VISIBLE; arrow.invalidate(); return true }
+    override fun clear() { text.text="等待稳定棋盘"; store.clear(); arrow.hint=null; arrow.visibility=View.GONE; arrow.invalidate() }
+    override fun hideForSample() { store.suppress(); arrow.visibility=View.GONE }
+    override fun beginSample(generation:Long) { store.beginSample(generation); arrow.visibility=View.GONE }
+    override fun completeSample(generation:Long,key:AnalysisKey?) {
+        if(!store.completeSample(generation))return
+        if(key!=null)restore(key) else { arrow.visibility=View.GONE }
+    }
+    override fun restore(key:AnalysisKey):Boolean { val h=store.current?:return false; if(h.key!=key || !attached || store.visible==null)return false; arrow.hint=h; arrow.visibility=View.VISIBLE; arrow.invalidate(); return true }
     override fun status(text:String) { this.text.text=text; ensure(); positionPanel() }
     fun setPanelVisible(visible:Boolean) { panelVisible=visible; positionPanel() }
     fun close() { clear(); if(attached) { runCatching { wm.removeViewImmediate(arrow) }; runCatching { wm.removeViewImmediate(panel) }; attached=false } }

@@ -4,6 +4,12 @@ import kotlin.math.*
 data class MoveHint(val key:AnalysisKey,val move:UciMove,val text:String)
 class HintStore {
     var current:MoveHint?=null; private set
+    private var sampling=false
+    private var generation=0L
+    val visible:MoveHint? get()=current.takeUnless { sampling }
+    fun beginSample(generation:Long) { if(generation>=this.generation) { this.generation=generation; sampling=true } }
+    fun suppress() { sampling=true }
+    fun completeSample(generation:Long):Boolean { if(generation!=this.generation)return false; sampling=false; return true }
     fun put(hint:MoveHint) { current=hint }
     fun clear() { current=null }
     fun transformChanged(revision:Long) { if(current?.key?.transformRevision!=revision)clear() }
@@ -25,5 +31,7 @@ interface HintOverlay {
     fun clear()
     fun hideForSample()
     fun restore(key:AnalysisKey):Boolean
+    fun beginSample(generation:Long) { hideForSample() }
+    fun completeSample(generation:Long,key:AnalysisKey?) { if(key!=null)restore(key) }
     fun status(text:String)
 }

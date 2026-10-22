@@ -6,9 +6,10 @@
 |---|---|---|
 | core | 19 通过 | FEN、90 格坐标、双方翻转、规则历史与中文走法 |
 | vision | 13 通过 | 人工标注的校准/保留样本全部 90 格，缩放、翻转、JPEG 干扰，吃子动画拒绝，稳定帧门控 |
-| engine JVM | 10 通过 | 搜索串行取消、完整 key 协议、权重校验、复制中断和模拟存储失败 |
-| app JVM/Robolectric API34 | 33 通过 | 生命周期、采样隔离、旧结果拒绝、走法合法性、轮次、断连、暂停、恢复候选、设置/校准保存、资源策略和诊断导出 |
+| engine JVM | 14 通过 | 搜索串行取消、完整 key 协议、权重校验、复制中断和模拟存储失败 |
+| app JVM/Robolectric API34 | 42 通过 | 生命周期、采样隔离、旧结果拒绝、走法合法性、轮次、断连、暂停、恢复候选、设置/校准保存、资源策略和诊断导出 |
 | 宿主机实际 Pikafish | 10 通过 | 真装载匹配 NNUE，初始合法走法、双方、马腿、炮架、将帅、应将、非法历史、终局、损坏权重拒绝及实际搜索 |
+| JNI 分配故障模拟 | 8 通过 | 编译生产 jni_bridge.cpp，使用测试 shim 注入数组、字符串、全局引用、类查找及 C++ 分配失败；不代表 ART 真机执行 |
 | APK assembleDebug | 通过 | NDK 实际 ARM64 两个引擎变体及基线分发库，离线权重已打包 |
 | 测试 APK assembleDebugAndroidTest | 通过编译 | 包含真实 Binder/JNI 和人工授权录屏流程测试；未执行设备测试 |
 | APK 校验 | 通过 | apksigner 签名、zipalign 16 KiB、全部 ELF PT_LOAD 16 KiB、ARM64-only、权重 SHA-256、无联网/无障碍权限、无私钥、含许可证 |
@@ -19,7 +20,7 @@
 
 ```sh
 ./tools/dev.sh ./gradlew :core:test :vision:test :engine:testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest --console=plain
-python3 -m unittest discover -s engine/src/test/python -p test_native.py -v
+python3 -m unittest discover -s engine/src/test/python -p 'test_*.py' -v
 ./tools/verify-apk.sh app/build/outputs/apk/debug/app-debug.apk
 ```
 
@@ -32,3 +33,5 @@ python3 -m unittest discover -s engine/src/test/python -p test_native.py -v
 第一版只请求整屏录制以固定物理坐标；默认不写整屏图片，诊断只接受已识别稳定棋盘。没有 Root、无障碍点击和自动落子。严重温控需要用户降温后手动继续；内存回退后需用户重新开始，不无限自动重启。
 
 云环境的 install_script 和 start_skill 已保存为配置草稿；当前构建已验证，发布环境快照仍由用户在环境设置中执行，尚未声称发布成功。
+
+独立复核及一次修复的证据见 [code-review.md](code-review.md)，全部取舍和暂缓小项见 [implementation-decisions.md](implementation-decisions.md)。暂停后重新校验、手工校正基线、过期文字撤销、采样代次、尺寸失效锁定、取消顺序、初始化中停止、JNI 空引用及资源重试均已补充验证。

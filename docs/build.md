@@ -20,7 +20,7 @@ python3 tools/fetch-engine.py
 ```sh
 ./tools/dev.sh cmake -S engine/src/main/cpp -B .build/native -G Ninja -DCMAKE_BUILD_TYPE=Release
 ./tools/dev.sh cmake --build .build/native -j 3
-python3 -m unittest discover -s engine/src/test/python -p test_native.py -v
+python3 -m unittest discover -s engine/src/test/python -p test_*.py -v
 ```
 
 测试 APK 仅编译不代表真机通过：

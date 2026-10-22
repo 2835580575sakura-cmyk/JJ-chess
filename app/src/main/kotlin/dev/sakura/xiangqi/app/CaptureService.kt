@@ -22,6 +22,7 @@ object CaptureBus {
     @Volatile var latest:PixelFrame?=null
     @Volatile var running=false
     @Volatile var stopRequest:(()->Unit)?=null
+    @Volatile var sampleGeneration:(()->Long)?=null
     @Volatile var sampleFilter:((Long)->Boolean)?=null
 }
 class CaptureService:Service() {
@@ -83,7 +84,7 @@ class CaptureService:Service() {
                         if(filter!=null) { if(!filter(time))return@setOnImageAvailableListener }
                         else if(lastSample!=Long.MIN_VALUE && time-lastSample<333333333L)return@setOnImageAvailableListener
                         lastSample=time
-                        val frame=FrameReader.readLatest(image); CaptureBus.latest=frame; CaptureBus.frames.tryEmit(frame)
+                        val frame=FrameReader.readLatest(image).copy(sampleGeneration=CaptureBus.sampleGeneration?.invoke()?:0); CaptureBus.latest=frame; CaptureBus.frames.tryEmit(frame)
                     } catch(t:Throwable) { if(!stopping)CaptureBus.events.tryEmit(CaptureEvent.Error("录屏画面读取失败，请重新开始")) }
                     finally { image.close() }
                 },handler)
@@ -95,7 +96,7 @@ class CaptureService:Service() {
         override fun stopProjection() { callback?.let { projection.unregisterCallback(it) }; projection.stop() }
     }
     override fun onDestroy() {
-        stopping=true; CaptureBus.running=false; CaptureBus.stopRequest=null; CaptureBus.sampleFilter=null
+        stopping=true; CaptureBus.running=false; CaptureBus.stopRequest=null; CaptureBus.sampleFilter=null; CaptureBus.sampleGeneration=null
         controller.stop(); CaptureBus.latest=null; stopForeground(STOP_FOREGROUND_REMOVE); thread.quitSafely(); super.onDestroy()
     }
     override fun onBind(intent:Intent?):IBinder?=null

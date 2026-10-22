@@ -22,6 +22,12 @@ class OverlayPolicyTest {
         store.put(MoveHint(key,UciMove.parse("b0c2"),"马八进七")); store.transformChanged(2)
         assertNull(store.current)
     }
+    @Test fun samplingSuppressionSurvivesNewResultsAndStaleCompletion() {
+        val store=HintStore(); val key=AnalysisKey("a",1,1,1); val hint=MoveHint(key,UciMove.parse("b0c2"),"马八进七")
+        store.beginSample(1); store.put(hint); assertNull(store.visible)
+        store.beginSample(2); store.completeSample(1); assertNull(store.visible)
+        store.completeSample(2); assertEquals(hint,store.visible)
+    }
     @Test fun panelStaysOutsideBoard() {
         val board=FloatRect(40f,400f,540f,1000f)
         val y=OverlayPolicy.panelY(1280,board,150,700)!!

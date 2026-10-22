@@ -29,8 +29,8 @@ class AssistantRuntime private constructor(private val context:Context,val confi
         if(policy.onThermalStatus(level)==ResourceAction.Pause) { userPaused=true; applyPause(); overlay.status("手机过热，已暂停；降温后手动继续") }
     }
     private val handler=Handler(Looper.getMainLooper())
-    private val gate=OverlaySamplingGate(requestHide={ handler.post { overlay.hideForSample(); gateHidden() } })
-    private fun gateHidden() { gate.hideForSample() }
+    private val gate=OverlaySamplingGate(requestHide={ handler.post { beginSample() } })
+    private fun beginSample() { overlay.hideForSample(); gate.hideForSample(); overlay.beginSample(gate.generation) }
     var preview:PixelFrame?=null; private set
     private var visible=true; private var userPaused=false; private var ending=false; private var captureVisible=true
     init {
@@ -39,35 +39,39 @@ class AssistantRuntime private constructor(private val context:Context,val confi
         thermalBlocked=power.currentThermalStatus>=PowerManager.THERMAL_STATUS_SEVERE
         if(thermalBlocked)userPaused=true
         coordinator.start(config)
+        CaptureBus.sampleGeneration={ gate.acceptedGeneration }
         CaptureBus.sampleFilter={ timestamp -> !visible && !userPaused && !thermalBlocked && !ending && captureVisible && gate.acceptFrame(timestamp) }
         scope.launch(start=CoroutineStart.UNDISPATCHED) { CaptureBus.frames.collect { frame -> if(!visible && !userPaused) { preview=frame; coordinator.onFrame(frame) } } }
         scope.launch(start=CoroutineStart.UNDISPATCHED) { CaptureBus.events.collect { event -> when(event) {
             is CaptureEvent.Stopped -> stop(false)
             is CaptureEvent.Error -> stop()
-            is CaptureEvent.Resized -> { userPaused=true; applyPause(); overlay.status("画面尺寸改变，请重新开始并校准") }
+            is CaptureEvent.Resized -> coordinatesChanged()
             is CaptureEvent.Visibility -> { captureVisible=event.visible; applyPause() }
             else -> Unit
         } } }
         scope.launch { coordinator.state.collect { state -> if(state.phase==SessionPhase.ERROR) {
-            if(state.message.contains("内存"))memoryRetry() else { lastMessage=state.message; Toast.makeText(context,state.message,Toast.LENGTH_LONG).show(); stop() }
+            if(policy.onEngineFailure(state.failureReason?:dev.sakura.xiangqi.core.EngineFailureReason.GENERIC) is ResourceAction.Retry)memoryRetry(state.failureReason==dev.sakura.xiangqi.core.EngineFailureReason.MEMORY) else { lastMessage=state.message; Toast.makeText(context,state.message,Toast.LENGTH_LONG).show(); stop() }
         } } }
         applyPause()
     }
     fun uiVisible(value:Boolean) { visible=value; overlay.setPanelVisible(!value); applyPause() }
-    private fun applyPause() { if(ending)return; if(visible||userPaused||thermalBlocked||!captureVisible)coordinator.pause() else { gate.hideForSample(); coordinator.resume() } }
+    private fun applyPause() { if(ending)return; if(visible||userPaused||thermalBlocked||!captureVisible)coordinator.pause() else { beginSample(); coordinator.resume() } }
     fun pauseToggle() { userPaused=!userPaused; applyPause() }
     fun stop(stopCapture:Boolean=true) {
         if(ending)return; ending=true; context.unregisterComponentCallbacks(this); power.removeThermalStatusListener(thermalListener); CaptureBus.sampleFilter={false}; overlay.close()
-        scope.launch { coordinator.stop().join(); overlay.close(); if(stopCapture)CaptureBus.stopRequest?.invoke(); if(current===this@AssistantRuntime)current=null; scope.cancel() }
+        if(stopCapture)CaptureBus.stopRequest?.invoke()
+        scope.launch { coordinator.stop().join(); overlay.close(); if(current===this@AssistantRuntime)current=null; scope.cancel() }
     }
-    override fun onConfigurationChanged(configuration:Configuration) { userPaused=true; applyPause(); overlay.status("屏幕配置改变，请停止后重新开始并校准") }
+    override fun onConfigurationChanged(configuration:Configuration) { coordinatesChanged() }
+    private fun coordinatesChanged() { SettingsStore(context).clearCalibration(); lastMessage="画面尺寸或屏幕配置改变，已停止；请重新开始并校准"; coordinator.invalidateCoordinates(); stop() }
     override fun onLowMemory() { memoryRetry() }
     override fun onTrimMemory(level:Int) { if(level>=ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL && level!=ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN)memoryRetry() }
-    private fun memoryRetry() {
+    private fun memoryRetry(confirmedMemory:Boolean=true) {
         if(ending)return
         val retry=policy.onMemoryPressure() as ResourceAction.Retry
         SettingsStore(context).save(config.copy(options=retry.options))
-        Toast.makeText(context,"内存不足，已停止。下次开始使用 2 线程 / 128 MiB，请手动重试。",Toast.LENGTH_LONG).show(); stop()
+        lastMessage=if(confirmedMemory)"内存不足，已停止。下次使用 2 线程 / 128 MiB，请手动重试。" else "引擎意外退出，原因未确定。下次用 2 线程 / 128 MiB 保守配置手动重试。"
+        Toast.makeText(context,lastMessage,Toast.LENGTH_LONG).show(); stop()
     }
     companion object {
         var lastMessage:String?=null; private set

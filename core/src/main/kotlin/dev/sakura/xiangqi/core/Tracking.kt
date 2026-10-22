@@ -40,6 +40,7 @@ class GameTracker {
         }
         return current!!
     }
+    fun matchingHistory(board:Board):List<Int> = nodes.indices.filter { nodes[it].snapshot.board==board }
     fun historyAt(index:Int):ConfirmedPosition?=nodes.getOrNull(index)
     fun confirmRecovery(snapshot: PositionSnapshot,historyIndex: Int?):ConfirmedPosition {
         if(historyIndex==null) return start(snapshot,snapshot.board==FenCodec.decode(START_FEN).getOrThrow().board && snapshot.sideToMove==Side.RED)
