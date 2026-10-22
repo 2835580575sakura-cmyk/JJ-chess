@@ -83,6 +83,16 @@ class SessionCoordinator(private val scope:CoroutineScope,private val gateway:En
         overlay.setCalibration(calibration); stable.reset(); onConfirmed(p)
         if(paused)update(SessionPhase.PAUSED,"已确认；返回 JJ 后继续") else beginSearch()
     }
+    fun confirmCandidate(candidate:ConfirmedPosition,calibration:GridCalibration)=launch {
+        if(stopped)return@launch
+        require(mutable.value.position?.board==candidate.snapshot.board) { "上一局与屏幕不同，请重新确认" }
+        invalidate(); val valid=gateway.validate(candidate.history).getOrThrow()
+        require(valid.snapshot.board==candidate.snapshot.board && valid.snapshot.sideToMove==candidate.snapshot.sideToMove)
+        val restored=tracker.restore(candidate.history); legal=valid.legalMoves
+        mutable.value=mutable.value.copy(position=restored.snapshot,calibration=calibration,key=null,historyComplete=restored.history.historyComplete,pendingHistoryIndices=emptyList())
+        overlay.setCalibration(calibration); onConfirmed(restored); stable.reset()
+        if(paused)update(SessionPhase.PAUSED,"历史已确认；返回 JJ 后继续") else beginSearch()
+    }
     private suspend fun validateAndSearch(position:ConfirmedPosition) {
         val valid=gateway.validate(position.history).getOrThrow(); require(valid.snapshot.board==position.snapshot.board && valid.snapshot.sideToMove==position.snapshot.sideToMove)
         legal=valid.legalMoves; mutable.value=mutable.value.copy(position=position.snapshot,historyComplete=position.history.historyComplete); onConfirmed(position); beginSearch()
@@ -108,7 +118,7 @@ class SessionCoordinator(private val scope:CoroutineScope,private val gateway:En
                     is EngineEvent.Failure -> { overlay.clear(); mutable.value=mutable.value.copy(key=null); update(SessionPhase.ERROR,"引擎异常：${event.message}；请停止后重试") }
                     is EngineEvent.Stopped -> { overlay.clear(); mutable.value=mutable.value.copy(key=null) }
                 }
-            } } } catch(e:CancellationException) { throw e } catch(t:Throwable) { mutex.withLock { if(mutable.value.key==key) { mutable.value=mutable.value.copy(key=null); overlay.clear(); update(SessionPhase.ERROR,"引擎已断开；请停止后重试") } } }
+            } } } catch(e:CancellationException) { throw e } catch(t:Throwable) { mutex.withLock { if(mutable.value.key==key) { mutable.value=mutable.value.copy(key=null); overlay.clear(); update(SessionPhase.ERROR,"${t.message?:"引擎已断开"}；请停止后重试") } } }
         }
     }
     private fun progress(info:EngineEvent.Info,p:PositionSnapshot):String {
@@ -118,5 +128,8 @@ class SessionCoordinator(private val scope:CoroutineScope,private val gateway:En
     fun pause()=launch { if(!stopped) { paused=true; invalidate(); stable.reset(); update(SessionPhase.PAUSED,"已暂停，等待继续") } }
     fun resume()=launch { if(!stopped) { paused=false; stable.reset(); update(SessionPhase.WAITING_BOARD,"等待新鲜稳定棋盘") } }
     fun recalibrate(calibration:GridCalibration)=launch { invalidate(); recognizer.reset(); stable.reset(); mutable.value=mutable.value.copy(calibration=calibration.copy(transformRevision=++transform)); overlay.setCalibration(mutable.value.calibration!!); update(SessionPhase.NEEDS_SYNC,"标定已更新，请重新校验棋盘") }
-    fun stop()=launch { if(!closed) { stopped=true; paused=true; invalidate(); closed=true; gateway.close(); frames.close(); mutable.value=SessionState(); overlay.status("已停止") } }
+    fun stop()=launch { if(!closed) {
+        stopped=true; paused=true; closed=true
+        try { invalidate() } finally { gateway.close(); frames.close(); mutable.value=SessionState(); overlay.clear(); overlay.status("已停止") }
+    } }
 }

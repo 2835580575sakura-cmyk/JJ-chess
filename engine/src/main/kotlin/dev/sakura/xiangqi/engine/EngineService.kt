@@ -57,5 +57,12 @@ class EngineService : Service() {
         override fun shutdown() { actor?.close(); actor=null; stopSelf() }
     }
     override fun onBind(intent: Intent?): IBinder=binder
+    override fun onTrimMemory(level:Int) {
+        super.onTrimMemory(level)
+        if(level>=android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL && level!=android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
+            error(null,"内存不足，请使用较低配置重试"); actor?.close(); actor=null; stopSelf()
+        }
+    }
+    override fun onLowMemory() { super.onLowMemory(); error(null,"内存不足，请使用较低配置重试"); actor?.close(); actor=null; stopSelf() }
     override fun onDestroy() { actor?.close(); actor=null; scope.cancel(); super.onDestroy() }
 }

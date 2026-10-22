@@ -4,6 +4,7 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application android:theme="@android:style/Theme.Material.Light.NoActionBar" android:label="象棋分析助手" android:allowBackup="false" android:supportsRtl="true">
+        <provider android:name=".DiagnosticProvider" android:authorities="${applicationId}.diagnostics" android:exported="false" android:grantUriPermissions="true" />
         <service android:name=".CaptureService" android:exported="false" android:foregroundServiceType="mediaProjection" />
         <activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
     </application>

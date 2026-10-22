@@ -33,13 +33,15 @@ class MainActivity:Activity() {
         button("开始分析") { begin() }
         button("校验棋子 / 当前行棋方") { editBoard() }
         button("校准棋盘位置") { calibrate() }
+        button("恢复上次历史（需核对当前棋盘）") { restoreCandidate() }
+        button("导出棋盘诊断") { exportDiagnostic() }
         button("暂停 / 继续") { AssistantRuntime.current?.pauseToggle() }
         button("返回 JJ 继续") { if(AssistantRuntime.current!=null)moveTaskToBack(true) else toast("请先开始分析") }
         button("停止录屏和分析") { AssistantRuntime.current?.stop(); status.text="已停止" }
         status=TextView(this).apply { text="尚未开始"; textSize=16f; setPadding(0,dp(16),0,0) }; root.addView(status)
         root.addView(TextView(this).apply { text="仅针对所提供视频中的木纹棋盘样式。换皮肤、翻转、窗口模式或识别有误时，请校准并逐格校验。"; textSize=13f; setPadding(0,dp(16),0,dp(20)) })
     }
-    private fun readConfig()=SessionConfig(playerSide=if(player.selectedItemPosition==0)Side.RED else Side.BLACK,movetimeMs=listOf(3000,15000,30000)[budget.selectedItemPosition],orientation=if(bottom.selectedItemPosition==0)Orientation.RED_BOTTOM else Orientation.BLACK_BOTTOM,initialTurn=if(turn.selectedItemPosition==0)Side.RED else Side.BLACK)
+    private fun readConfig()=SessionConfig(playerSide=if(player.selectedItemPosition==0)Side.RED else Side.BLACK,movetimeMs=listOf(3000,15000,30000)[budget.selectedItemPosition],orientation=if(bottom.selectedItemPosition==0)Orientation.RED_BOTTOM else Orientation.BLACK_BOTTOM,initialTurn=if(turn.selectedItemPosition==0)Side.RED else Side.BLACK,options=store.load().options.copy(threads=minOf(store.load().options.threads,Runtime.getRuntime().availableProcessors().coerceAtLeast(1))))
     private fun begin() {
         if(AssistantRuntime.current!=null) { toast("当前分析正在运行，请先停止再修改设置"); return }
         if(!Settings.canDrawOverlays(this)) { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,Uri.parse("package:$packageName"))); toast("请允许显示悬浮窗，然后再点开始分析"); return }
@@ -56,7 +58,7 @@ class MainActivity:Activity() {
         try { startForegroundService(Intent(this,CaptureService::class.java).putExtra("resultCode",resultCode).putExtra("consent",data)); status.text="录屏已开启，请切换到 JJ 人机棋盘"; moveTaskToBack(true) }
         catch(t:Throwable) { runtime.stop(); status.text="录屏启动失败：${t.message}" }
     }
-    override fun onResume() { super.onResume(); AssistantRuntime.current?.uiVisible(true); watch() }
+    override fun onResume() { super.onResume(); AssistantRuntime.current?.uiVisible(true); if(AssistantRuntime.current==null)AssistantRuntime.lastMessage?.let { status.text=it }; watch() }
     override fun onPause() { AssistantRuntime.current?.uiVisible(false); super.onPause() }
     private fun watch() { watching?.cancel(); val runtime=AssistantRuntime.current?:return; watching=scope.launch { runtime.coordinator.state.collect { value -> status.text=value.message+if(value.position!=null)"\n"+(if(value.historyComplete)"完整行棋历史" else "历史不完整：重复局面判断可能受限") else "" } } }
     private fun toast(message:String) { Toast.makeText(this,message,Toast.LENGTH_LONG).show() }
@@ -91,6 +93,25 @@ class MainActivity:Activity() {
             runtime.coordinator.recalibrate(current.copy(captureRect=r,displayRect=FloatRect(r.left*w/frame.width,r.top*h/frame.height,r.right*w/frame.width,r.bottom*h/frame.height)))
             toast("已保存；返回 JJ 稳定识别后再校验棋子")
         }.show()
+    }
+    private fun restoreCandidate() {
+        val runtime=AssistantRuntime.current?:return toast("请先开始并识别当前棋盘")
+        val candidate=runtime.recoveryCandidate?:return toast("没有可用的历史记录")
+        val state=runtime.coordinator.state.value; val cal=state.calibration?:return toast("请先识别当前棋盘")
+        if(state.position?.board!=candidate.snapshot.board)return toast("上次历史与当前棋盘不同，不能恢复")
+        AlertDialog.Builder(this).setTitle("确认历史属于当前这局")
+            .setMessage("已匹配棋子位置。请确认当前轮到${if(candidate.snapshot.sideToMove==Side.RED)"红" else "黑"}方走，且与上次是同一局。")
+            .setNegativeButton("取消",null).setPositiveButton("确认恢复") { _,_ -> scope.launch { runtime.coordinator.confirmCandidate(candidate,cal).join(); if(runtime.coordinator.state.value.phase==SessionPhase.ERROR)toast(runtime.coordinator.state.value.message) else moveTaskToBack(true) } }.show()
+    }
+    private fun exportDiagnostic() {
+        val runtime=AssistantRuntime.current?:return toast("请先开始分析")
+        val frame=runtime.preview?:return toast("还没有 JJ 棋盘画面"); val rect=runtime.coordinator.state.value.calibration?.captureRect?:return toast("请先校准棋盘")
+        scope.launch {
+            runCatching {
+                val uri=withContext(Dispatchers.IO) { DiagnosticExporter(this@MainActivity).export(DiagnosticExporter.crop(frame,rect),listOf(DiagnosticEvent(SystemClock.elapsedRealtime(),DiagnosticCode.NEEDS_CONFIRMATION))) }
+                startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("application/zip").putExtra(Intent.EXTRA_STREAM,uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),"分享棋盘诊断"))
+            }.onFailure { toast("导出失败，请检查剩余存储空间") }
+        }
     }
     override fun onDestroy() { watching?.cancel(); scope.cancel(); super.onDestroy() }
 }

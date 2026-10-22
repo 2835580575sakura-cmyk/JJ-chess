@@ -93,6 +93,12 @@ class SessionCoordinatorTest {
         c.resume().join(); runCurrent(); assertEquals(1,g.requests.size)
         c.onObservation(BoardObservation(initial.board,List(90){1f},1),cal).join(); runCurrent(); assertEquals(2,g.requests.size); assertNotEquals(key,c.state.value.key); c.stop().join()
     }
+    @Test fun oldSessionCandidateCannotReplaceNewBoard()=runTest {
+        val g=Gateway(); val o=Overlay(); val c=SessionCoordinator(backgroundScope,g,o)
+        c.start(SessionConfig()).join(); c.onObservation(BoardObservation(initial.board.apply(UciMove.parse("b0c2")),List(90){1f},1),cal).join()
+        c.confirmCandidate(GameTracker().start(initial,true),cal).join()
+        assertEquals(SessionPhase.ERROR,c.state.value.phase); assertTrue(g.requests.isEmpty()); assertNull(o.hint); c.stop().join()
+    }
     @Test fun scoreUsesPlayerPerspective() {
         assertEquals(-120,ScorePresentation.playerCp(EngineScore(cp=120),Side.RED,Side.BLACK))
         assertEquals(120,ScorePresentation.playerCp(EngineScore(cp=120),Side.RED,Side.RED))

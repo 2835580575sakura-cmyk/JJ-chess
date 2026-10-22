@@ -28,4 +28,10 @@ class NetworkInstallerTest {
         assertArrayEquals(before,dir.resolve("pikafish.nnue").readBytes())
         assertFalse(dir.resolve("pikafish.nnue.tmp").exists())
     }
+    @Test fun diskFullDoesNotPublishPartialNetwork() {
+        val dir=Files.createTempDirectory("net-test").toFile()
+        val result=NetworkInstaller(dir,hash) { object:java.io.InputStream() { var count=0; override fun read():Int { if(count++>=5)throw IOException("No space left on device"); return 1 } } }.ensureInstalled()
+        assertTrue(result.isFailure); assertFalse(dir.resolve("pikafish.nnue").exists()); assertFalse(dir.resolve("pikafish.nnue.tmp").exists())
+    }
+
 }
