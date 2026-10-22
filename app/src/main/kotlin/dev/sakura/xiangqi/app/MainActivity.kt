@@ -16,7 +16,8 @@ import kotlinx.coroutines.*
 class MainActivity:Activity() {
     private val scope=CoroutineScope(SupervisorJob()+Dispatchers.Main.immediate)
     private var watching:Job?=null
-    private lateinit var status:TextView; private lateinit var player:Spinner; private lateinit var bottom:Spinner; private lateinit var turn:Spinner; private lateinit var budget:Spinner
+    private lateinit var status:TextView; private lateinit var player:Spinner; private lateinit var bottom:Spinner; private lateinit var turn:Spinner; private lateinit var budget:Spinner; private lateinit var loadMode:Spinner
+    private lateinit var thermalPause:CheckBox
     private lateinit var store:SettingsStore
     private fun dp(n:Int)=(n*resources.displayMetrics.density).toInt()
     override fun onCreate(savedInstanceState:Bundle?) {
@@ -30,7 +31,9 @@ class MainActivity:Activity() {
         bottom=choice("屏幕下方是哪一方",listOf("红方在下","黑方在下"),if(saved.orientation==Orientation.RED_BOTTOM)0 else 1)
         turn=choice("第一次确认时轮到谁走",listOf("红方先走","黑方先走"),if(saved.initialTurn==Side.RED)0 else 1)
         budget=choice("每步思考时间",listOf("快速 · 3 秒","默认 · 15 秒","加强 · 30 秒"),listOf(3000,15000,30000).indexOf(saved.movetimeMs).coerceAtLeast(0))
-        root.addView(TextView(this).apply { text="更长时间通常计算更深入，也更耗电。修改这些设置后需停止并重新开始。"; textSize=13f })
+        loadMode=choice("计算负载",listOf("省热 · 2 线程（推荐）","高性能 · 4 线程"),if(saved.options.threads>=4)1 else 0)
+        thermalPause=CheckBox(this).apply { text="手机过热时自动暂停插件"; isChecked=saved.pauseOnOverheat; root.addView(this) }
+        root.addView(TextView(this).apply { text="自动暂停默认关闭，关闭后插件继续计算；手机系统自身的降频和温控不受影响。省热模式计算速度较低；长时间或高性能模式更易发热。修改设置后需停止并重新开始。"; textSize=13f })
         fun button(label:String,action:()->Unit) { root.addView(Button(this).apply { text=label; setOnClickListener { action() } }) }
         button("开始分析") { begin() }
         button("校验棋子 / 当前行棋方") { editBoard() }
@@ -44,7 +47,7 @@ class MainActivity:Activity() {
         status=TextView(this).apply { text="尚未开始"; textSize=16f; setPadding(0,dp(16),0,0) }; root.addView(status)
         root.addView(TextView(this).apply { text="棋子识别失败时，在 JJ 点「重来」，保留 32 枚棋子的标准开局，再回到这里适配。适配会保存，同一棋子样式通常只需一次；换皮肤后请重新适配。中途接入时，请校验棋子和当前行棋方。"; textSize=13f; setPadding(0,dp(16),0,dp(20)) })
     }
-    private fun readConfig()=SessionConfig(playerSide=if(player.selectedItemPosition==0)Side.RED else Side.BLACK,movetimeMs=listOf(3000,15000,30000)[budget.selectedItemPosition],orientation=if(bottom.selectedItemPosition==0)Orientation.RED_BOTTOM else Orientation.BLACK_BOTTOM,initialTurn=if(turn.selectedItemPosition==0)Side.RED else Side.BLACK,options=store.load().options.copy(threads=minOf(store.load().options.threads,Runtime.getRuntime().availableProcessors().coerceAtLeast(1))))
+    private fun readConfig()=SessionConfig(playerSide=if(player.selectedItemPosition==0)Side.RED else Side.BLACK,movetimeMs=listOf(3000,15000,30000)[budget.selectedItemPosition],orientation=if(bottom.selectedItemPosition==0)Orientation.RED_BOTTOM else Orientation.BLACK_BOTTOM,initialTurn=if(turn.selectedItemPosition==0)Side.RED else Side.BLACK,options=store.load().options.copy(threads=minOf(listOf(2,4)[loadMode.selectedItemPosition],Runtime.getRuntime().availableProcessors().coerceAtLeast(1))),pauseOnOverheat=thermalPause.isChecked)
     private fun begin() {
         if(AssistantRuntime.current!=null) { toast("当前分析正在运行，请先停止再修改设置"); return }
         if(!Settings.canDrawOverlays(this)) { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,Uri.parse("package:$packageName"))); toast("请允许显示悬浮窗，然后再点开始分析"); return }

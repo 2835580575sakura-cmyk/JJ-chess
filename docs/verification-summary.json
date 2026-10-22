@@ -19,7 +19,7 @@
       "skipped": 0
     },
     "app": {
-      "tests": 51,
+      "tests": 74,
       "failures": 0,
       "errors": 0,
       "skipped": 0
@@ -40,7 +40,7 @@
     "python3 -m unittest discover -s tools/tests -v",
     "./tools/verify-apk.sh app/build/outputs/apk/debug/app-debug.apk"
   ],
-  "version": "0.1.1",
+  "version": "0.1.2",
   "sourcePackaging": {
     "tests": 1,
     "failures": 0

@@ -34,6 +34,26 @@ class SessionCoordinatorTest {
     }
     private val initial=FenCodec.decode(START_FEN).getOrThrow()
     private val cal=GridCalibration(FloatRect(40f,366f,545f,909f),FloatRect(40f,366f,545f,909f),transformRevision=1)
+    @Test fun redundantResumeDoesNotResetActiveSearchOrReadyHint()=runTest {
+        val g=Gateway(); val o=Overlay(); val c=SessionCoordinator(backgroundScope,g,o)
+        c.start(SessionConfig(movetimeMs=30000)).join(); c.confirm(initial,cal).join(); runCurrent()
+        val key=c.state.value.key!!
+        c.resume().join()
+        assertEquals(SessionPhase.ANALYZING,c.state.value.phase); assertEquals(key,c.state.value.key)
+        g.events.emit(EngineEvent.BestMove(key,UciMove.parse("b0c2"))); runCurrent()
+        val hint=o.hint; assertNotNull(hint)
+        repeat(3) { c.resume().join() }
+        assertEquals(SessionPhase.READY,c.state.value.phase); assertEquals(hint,o.hint)
+        assertEquals(1,g.requests.size); c.stop().join()
+    }
+    @Test fun thirtySecondSearchDoesNotTurnIntoPauseByItself()=runTest {
+        val g=Gateway(); val o=Overlay(); val c=SessionCoordinator(backgroundScope,g,o)
+        c.start(SessionConfig(movetimeMs=30000)).join(); c.confirm(initial,cal).join(); runCurrent()
+        val key=c.state.value.key
+        advanceTimeBy(30001); runCurrent()
+        assertEquals(SessionPhase.ANALYZING,c.state.value.phase); assertEquals(key,c.state.value.key)
+        c.stop().join()
+    }
     @Test fun adaptingWhilePausedWaitsForMatchingFreshBoardBeforeSearching()=runTest {
         val g=Gateway(); val o=Overlay(); val c=SessionCoordinator(backgroundScope,g,o)
         c.start(SessionConfig()).join(); c.pause().join()

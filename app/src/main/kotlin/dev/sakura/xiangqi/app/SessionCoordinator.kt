@@ -11,7 +11,7 @@ import kotlinx.serialization.Serializable
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
-@Serializable data class SessionConfig(val playerSide:Side=Side.RED,val movetimeMs:Int=15000,val orientation:Orientation=Orientation.RED_BOTTOM,val initialTurn:Side=Side.RED,val options:EngineOptions=EngineOptions()) {
+@Serializable data class SessionConfig(val playerSide:Side=Side.RED,val movetimeMs:Int=15000,val orientation:Orientation=Orientation.RED_BOTTOM,val initialTurn:Side=Side.RED,val options:EngineOptions=EngineOptions(threads=2),val pauseOnOverheat:Boolean=false) {
     init { require(movetimeMs in listOf(3000,15000,30000)) }
 }
 enum class SessionPhase { STOPPED,WAITING_BOARD,AWAITING_CONFIRMATION,ANALYZING,WAITING_OPPONENT,READY,PAUSED,ERROR,NEEDS_SYNC }
@@ -53,6 +53,7 @@ class SessionCoordinator(
     private var lastRawBoard:Board?=null
     private var manualBaseline:Board?=null
     private var legal=emptyList<UciMove>()
+    private var lastTrackedTimestampNs:Long?=null
     private var collector:Job?=null
     private val processor=scope.launch { for(frame in frames)operate { processFrame(frame) } }
 
@@ -157,15 +158,61 @@ class SessionCoordinator(
             update(SessionPhase.AWAITING_CONFIRMATION,"棋盘已识别，点「校验」确认棋子及行棋方"); return
         }
         when(val result=tracker.accept(observation,legal)) {
-            TrackingUpdate.Unchanged -> if(mutable.value.phase !in listOf(SessionPhase.NEEDS_SYNC,SessionPhase.ERROR) && mutable.value.key==null)beginSearch()
-            is TrackingUpdate.Confirmed -> { invalidate(); validateAndSearch(result.position) }
+            TrackingUpdate.Unchanged -> {
+                if(isTrustedObservation(observation))lastTrackedTimestampNs=observation.timestampNs
+                if(mutable.value.phase !in listOf(SessionPhase.NEEDS_SYNC,SessionPhase.ERROR) && mutable.value.key==null)beginSearch()
+            }
+            is TrackingUpdate.Confirmed -> {
+                lastTrackedTimestampNs=observation.timestampNs.takeIf { isTrustedObservation(observation) }
+                invalidate(); validateAndSearch(result.position)
+            }
             is TrackingUpdate.NeedsConfirmation -> requireConfirmation(result.board,result.reason)
-            is TrackingUpdate.Unsynced -> requireConfirmation(result.board,result.reason)
+            is TrackingUpdate.Unsynced -> {
+                invalidate()
+                val reconciled=reconcileTwoPlies(observation)
+                if(reconciled==null)requireConfirmation(result.board,result.reason)
+                else { lastTrackedTimestampNs=observation.timestampNs; validateAndSearch(reconciled) }
+            }
         }
+    }
+    private fun isTrustedObservation(observation:BoardObservation):Boolean =
+        observation.board!=null && !observation.occluded && observation.motion<=.10f &&
+            observation.recognitionIssue==RecognitionIssue.NONE && observation.unknownCellCount==0 &&
+            observation.confidence.size==90 && observation.confidence.all { it>=.70f }
+
+    private data class TwoPlyCandidate(val board:Board,val legalReplies:List<UciMove>)
+    private suspend fun reconcileTwoPlies(observation:BoardObservation):ConfirmedPosition? {
+        val before=tracker.current?:return null
+        val previousTimestamp=lastTrackedTimestampNs?:return null
+        val elapsed=observation.timestampNs-previousTimestamp
+        if(elapsed !in 1L..5_000_000_000L || !isTrustedObservation(observation) ||
+            needsReconfirm || manualBaseline!=null || paused || mutable.value.phase==SessionPhase.ERROR)return null
+        val observed=observation.board?:return null
+        val candidates=mutableListOf<TwoPlyCandidate>()
+        for(first in legal.distinct()) {
+            val intermediate=runCatching { before.snapshot.board.apply(first) }.getOrNull()?:continue
+            val changed=intermediate.cells.indices.filter { intermediate.cells[it]!=observed.cells[it] }
+            if(changed.size!=2)continue
+            val source=changed.singleOrNull { intermediate.cells[it]?.side==before.snapshot.sideToMove.opposite() && observed.cells[it]==null }?:continue
+            val piece=intermediate.cells[source]
+            val destination=changed.singleOrNull { it!=source && observed.cells[it]==piece }?:continue
+            val reply=UciMove(Square(source%9,source/9),Square(destination%9,destination/9))
+            if(intermediate.apply(reply)!=observed)continue
+            val valid=gateway.validate(before.history.copy(moves=before.history.moves+first)).getOrThrow()
+            stillRunning()
+            if(valid.snapshot.board!=intermediate ||
+                valid.snapshot.sideToMove!=before.snapshot.sideToMove.opposite() || reply !in valid.legalMoves)continue
+            candidates.add(TwoPlyCandidate(intermediate,valid.legalMoves))
+            if(candidates.size>1)return null
+        }
+        val candidate=candidates.singleOrNull()?:return null
+        check(tracker.accept(observation.copy(board=candidate.board),legal) is TrackingUpdate.Confirmed)
+        return (tracker.accept(observation,candidate.legalReplies) as TrackingUpdate.Confirmed).position
     }
     fun historyCandidate(index:Int)=tracker.historyAt(index)
     fun confirm(snapshot:PositionSnapshot,calibration:GridCalibration,historyIndex:Int?=null)=launch {
         if(stopped)return@launch
+        lastTrackedTimestampNs=null
         invalidate(); stillRunning(); FenCodec.decode(FenCodec.encode(snapshot)).getOrThrow()
         val candidate=historyIndex?.let {
             val p=requireNotNull(tracker.historyAt(it))
@@ -185,6 +232,7 @@ class SessionCoordinator(
     }
     fun confirmCandidate(candidate:ConfirmedPosition,calibration:GridCalibration)=launch {
         if(stopped)return@launch
+        lastTrackedTimestampNs=null
         require(mutable.value.position?.board==candidate.snapshot.board) { "上一局与屏幕不同，请重新确认" }
         invalidate(); val valid=gateway.validate(candidate.history).getOrThrow(); stillRunning()
         require(valid.snapshot.board==candidate.snapshot.board && valid.snapshot.sideToMove==candidate.snapshot.sideToMove)
@@ -237,14 +285,15 @@ class SessionCoordinator(
     }
     private fun progress(info:EngineEvent.Info,p:PositionSnapshot):String =
         "深度 ${info.depth} · ${info.nps/1000} 千节点/秒\n${ScorePresentation.format(info.score,p.sideToMove,config.playerSide)}\n变化 ${info.pv.take(4).joinToString(" ")}"
-    fun pause()=launch {
+    fun pause(message:String="已暂停，继续前需校验当前局面")=launch {
         if(!stopped) {
-            if(!paused) { confirmedDuringPause=false; needsReconfirm=needsReconfirm||tracker.current!=null }
-            paused=true; invalidate(); stable.reset(); update(SessionPhase.PAUSED,"已暂停，继续前需校验当前局面")
+            if(paused) { update(SessionPhase.PAUSED,message); return@launch }
+            confirmedDuringPause=false; needsReconfirm=needsReconfirm||tracker.current!=null
+            paused=true; invalidate(); stable.reset(); update(SessionPhase.PAUSED,message)
         }
     }
     fun resume()=launch {
-        if(!stopped) {
+        if(!stopped && paused) {
             paused=false; stable.reset()
             if(confirmedDuringPause)needsReconfirm=false
             confirmedDuringPause=false

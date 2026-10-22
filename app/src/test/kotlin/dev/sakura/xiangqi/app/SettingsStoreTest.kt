@@ -8,6 +8,23 @@ import org.robolectric.annotation.Config
 import dev.sakura.xiangqi.core.*
 @RunWith(RobolectricTestRunner::class) @Config(sdk=[34],manifest=Config.NONE)
 class SettingsStoreTest {
+    @Test fun automaticThermalPauseIsOptInAndChoicePersists() {
+        val store=SettingsStore(RuntimeEnvironment.getApplication())
+        assertFalse(store.load().pauseOnOverheat)
+        store.save(store.load().copy(pauseOnOverheat=true))
+        assertTrue(SettingsStore(RuntimeEnvironment.getApplication()).load().pauseOnOverheat)
+        store.save(store.load().copy(pauseOnOverheat=false))
+        assertFalse(SettingsStore(RuntimeEnvironment.getApplication()).load().pauseOnOverheat)
+    }
+    @Test fun legacyDefaultUsesCoolThreadsAndExplicitPerformanceChoicePersists() {
+        val context=RuntimeEnvironment.getApplication()
+        context.getSharedPreferences("assistant",0).edit().putString("config","{}").commit()
+        val store=SettingsStore(context)
+        assertEquals(2,store.load().options.threads)
+        val performance=store.load().copy(options=EngineOptions(threads=4))
+        store.save(performance)
+        assertEquals(4,SettingsStore(context).load().options.threads)
+    }
     @Test fun legacyCalibrationDoesNotOverrideNewPhoneGridDetection() {
         val context=RuntimeEnvironment.getApplication()
         val legacy="""{"calibration":{"captureRect":{"left":40.0,"top":366.0,"right":545.0,"bottom":909.0},"displayRect":{"left":40.0,"top":366.0,"right":545.0,"bottom":909.0}},"frameWidth":576,"frameHeight":1280,"displayWidth":576,"displayHeight":1280}"""
